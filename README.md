@@ -7,11 +7,11 @@ An operational decision support platform for polar expeditions in which changes 
 ---
 
 ## 1. Development Status
-**Current Status**: `PHASE 1.75 — SHARED SUPABASE DEV & REAL DATABASE VERIFICATION (Completed)`
+**Current Status**: `PHASE 1.9 — FOUNDATION HARDENING, SECURITY BASELINE & SPLIT READINESS (Completed — SPLIT READY)`
 
-The canonical database schema, spatial extensions, operational event immutability triggers, and deterministic synthetic seed data (45th ISEA baseline) have been applied and verified against an authentic, dedicated Supabase PostgreSQL 17 development instance (`HexaCoders SIH26062 DEV` in region `ap-south-1`). Furthermore, the repository is fully structured for a balanced two-person engineering team working in parallel (Track A: Planning & Decisions; Track B: Logistics, Resources & Incident Response) with zero direct work on `main`, clean rebase-and-squash merge workflows, strict cross-domain contracts, and a shared development database environment.
+The repository foundation is fully hardened and split-ready for parallel, two-person engineering tracks (Track A: Planning & Decisions; Track B: Logistics, Resources & Incident Response). Canonical migration lineage has been reconciled, Row Level Security (RLS) is active across all 35 operational tables on the dedicated Supabase DEV environment (`HexaCoders SIH26062 DEV`), an automated GitHub Actions CI test harness is deployed, and safe environment configuration checking (`scripts/check-env.ps1`) is operational.
 
-Full documentation is available in [docs/SUPABASE_DEVELOPMENT.md](docs/SUPABASE_DEVELOPMENT.md), [docs/COLLABORATION_MODEL.md](docs/COLLABORATION_MODEL.md), and [docs/SPLIT_READINESS.md](docs/SPLIT_READINESS.md).
+Full governance and setup documentation is available in [docs/SPLIT_READINESS.md](docs/SPLIT_READINESS.md), [docs/SUPABASE_DEVELOPMENT.md](docs/SUPABASE_DEVELOPMENT.md), [docs/COLLABORATION_MODEL.md](docs/COLLABORATION_MODEL.md), and [docs/GIT_WORKFLOW.md](docs/GIT_WORKFLOW.md).
 
 ---
 
@@ -50,6 +50,7 @@ Every user-facing workflow and core logic engine is validated through a three-ti
 2. **Integration Testing**: Verifies multi-step cascading pipelines (e.g., cargo delay → mission block → constraint violation) via FastAPI TestClient and PostgreSQL transactions.
 3. **E2E Browser Testing**: Validates real interactive operator journeys and human-approval workflows using genuine Playwright browser automation.
 4. **Unified Verification Script**: `./scripts/verify.ps1` runs all tiers in sequence before any branch merge.
+5. **Continuous Integration**: Automated GitHub Actions workflow (`.github/workflows/ci.yml`) runs on all pushes and pull requests to `main`.
 
 ---
 
@@ -61,6 +62,7 @@ Every user-facing workflow and core logic engine is validated through a three-ti
 | **Phase 1** | Database Schema, Migrations & Synthetic Seed | **Completed** |
 | **Phase 1.5** | Two-Person Development Architecture & Split-Readiness Foundation | **Completed** |
 | **Phase 1.75** | Shared Supabase Development Environment & Real Database Verification | **Completed** |
+| **Phase 1.9** | Foundation Hardening, Security Baseline, CI & Final Split Readiness | **Completed** |
 | **Phase 2** | Authentication, Roles & Security Baseline | Pending |
 | **Phase 3** | Expedition, Mission, Person & Team Services | Pending |
 | **Phase 4** | Cargo, Package, Transport Leg & Location Modules | Pending |

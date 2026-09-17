@@ -18,7 +18,7 @@ The development sequence for HexaCoders builds foundational domain reality befor
 
 ### [COMPLETED] Phase 1: Database Schema, Migrations & Synthetic Baseline Seed
 - Configure Supabase / PostgreSQL schema with PostGIS extension.
-- Author authoritative DDL migration `20260917000001_expedition_operational_schema.sql`.
+- Author authoritative DDL migration `20260917000000_expedition_operational_schema.sql`.
 - Author deterministic synthetic seed generator (`supabase/seed.sql`) matching 45th ISEA parameters.
 - 24/24 unit and database schema tests verified passing (`2cd861f`).
 
@@ -44,6 +44,16 @@ The development sequence for HexaCoders builds foundational domain reality befor
 - Verified foreign key rejection behavior on invalid insert attempt.
 - Configured backend environment connection (`DATABASE_URL`, `SUPABASE_DB_URL`, `API_BASE_URL`) and non-leaking DB health check helper (`get_db_health()`).
 - Documented project details in `docs/SUPABASE_DEVELOPMENT.md` and updated team workflow policies.
+
+### [COMPLETED] Phase 1.9: Foundation Hardening, Security Baseline, CI & Final Split Readiness
+- Reconciled migration lineage: `20260917000000_expedition_operational_schema.sql` confirmed authoritative initial schema; eliminated typo references.
+- Authored and applied security baseline migration `20260918000001_enable_rls_security_baseline.sql` enabling Row Level Security (RLS) on all 35 public operational tables with zero permissive public policies.
+- Verified real Supabase DEV PostgreSQL catalog: `rowsecurity = true` across all 35 tables; PostgREST direct access blocked while preserving private FastAPI access.
+- Created automated GitHub Actions CI workflow (`.github/workflows/ci.yml`) testing Python 3.13 backend and schema assertions without database secrets.
+- Authored safe development environment validation script (`scripts/check-env.ps1`) detecting required variable names without printing secret values.
+- Documented branch protection policy and out-of-band credential sharing protocol in `docs/GIT_WORKFLOW.md` and `docs/ENVIRONMENT_STRATEGY.md`.
+- Disambiguated polar domain terminology and hero codes (`I-42` as scientific instrument/asset, `C-117` as cargo consignment) in `docs/DOMAIN_LANGUAGE.md`.
+- Evaluated final split-readiness status as `SPLIT READY`.
 
 ### Phase 2: Authentication, Roles & Security Baseline (Shared / Person A initially)
 - JWT-based authentication using FastAPI security utilities.

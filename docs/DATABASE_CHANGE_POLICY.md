@@ -61,3 +61,20 @@ The deterministic seed script `supabase/seed.sql` represents the single shared o
 8. **Seed Baseline is Canonical**: `supabase/seed.sql` is the authoritative source for demo data.
 9. **Documented Seed Additions**: Domain-specific seed additions must be intentional, well-commented, and preserve data provenance (`SYNTHETIC_DEMO`).
 
+---
+
+## 5. Authoritative Migration Lineage
+
+The authoritative sequence of applied migrations for the SIH26062 project is:
+
+1. **`20260917000000_expedition_operational_schema.sql`**
+   - **Applied Remote Version**: `20260917183007_expedition_operational_schema`
+   - **Scope**: Core relational schema (35 tables, 14 enums, spatial extensions, unique constraints, foreign keys, immutability trigger on `operational_events`).
+   - **Reconciliation Note**: Any historical or draft references to `20260917000001_expedition_operational_schema.sql` in previous roadmaps were typographical; `20260917000000` is the single canonical initial DDL migration.
+
+2. **`20260918000001_enable_rls_security_baseline.sql`**
+   - **Applied Remote Version**: `enable_rls_security_baseline`
+   - **Scope**: Enables Row Level Security (RLS) across all 35 public operational tables with zero permissive public policies.
+   - **Security Purpose**: Prevents unauthenticated direct read/write access via Supabase PostgREST while preserving private direct PostgreSQL access for the FastAPI backend server.
+
+

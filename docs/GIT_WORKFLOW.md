@@ -103,10 +103,43 @@ Open a Pull Request targeting `main` using the standard [.github/PULL_REQUEST_TE
 
 ### Step 6: Review & Merge
 1. The peer developer reviews the PR, inspecting cross-domain contracts, tests, and documentation.
-2. Person A performs the **Squash and Merge** into `main`.
-3. The remote feature branch is deleted.
-4. Person B checks out `main` and pulls the latest integrated state:
+2. The GitHub Actions CI pipeline (`CI / Backend Unit & Schema Tests`) must pass green.
+3. Person A performs the **Squash and Merge** into `main`.
+4. The remote feature branch is deleted.
+5. Person B checks out `main` and pulls the latest integrated state:
 ```bash
 git checkout main
 git pull origin main
 ```
+
+---
+
+## 5. Continuous Integration (CI) Pipeline
+
+Automated checks are executed on every push and pull request targeting `main` via [.github/workflows/ci.yml](../.github/workflows/ci.yml).
+
+### CI Gates Enforced:
+1. **Repository & Artifact Integrity**: Verifies presence of authoritative migrations, seed files, constitution (`AGENTS.md`), and environment templates.
+2. **Backend Unit & Schema Test Suite**: Executes `python -m pytest tests/ -v` on Python 3.13.
+3. **No Database Secrets Required**: Baseline CI executes self-contained schema and unit checks without requiring remote Supabase credentials or production access.
+
+Every Pull Request must achieve a passing CI run before merge.
+
+---
+
+## 6. GitHub Branch Protection Policy (`main`)
+
+To preserve the integrity of the integration trunk, the following protection rules must be configured for the `main` branch in the GitHub repository settings:
+
+1. **Require a pull request before merging**: Disallow direct routine commits to `main`.
+2. **Require status checks to pass before merging**:
+   - Required status check: `CI / Backend Unit & Schema Tests`
+3. **Do not allow force pushes**: Block `git push --force`.
+4. **Do not allow deletions**: Prevent accidental deletion of `main`.
+5. **Merge Authority**: Person A (Project Head) retains exclusive final squash-and-merge authority. Approvals from specific named users are not hard-locked to prevent blocking parallel development before Person B's GitHub handle is confirmed.
+
+> [!NOTE]
+> **Enforcement Status**: Branch protection is fully documented here and in CODEOWNERS. Because GitHub remote branch protection rules require repository administrator configuration in GitHub Web Settings (or GitHub CLI with admin scope), the status is:
+> **Branch protection documented but not remotely enforced**.
+> Person A should toggle these settings in the GitHub repository Settings -> Branches UI upon the first remote push.
+

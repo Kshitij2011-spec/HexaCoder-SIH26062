@@ -55,13 +55,18 @@ This document records the configuration, metadata, and connection architecture f
 
 ---
 
-## 3. Applied Migration & Seed Verification
+## 3. Applied Migration Lineage & Seed Verification
 
-- **Authoritative DDL Migration**: [20260917000000_expedition_operational_schema.sql](file:///c:/Users/Kshitij%20Parkhe/OneDrive/Desktop/HexaCoder-SIH26062/supabase/migrations/20260917000000_expedition_operational_schema.sql)
-  - Successfully applied to `tywtsmvccifkugoecrmd`.
-  - 35 operational tables created.
-  - 14 controlled enum types instantiated.
-  - Immutability trigger `trg_operational_events_immutable` deployed and validated.
+- **Authoritative Migrations Applied**:
+  1. **`20260917000000_expedition_operational_schema.sql`** (Applied remotely as `20260917183007_expedition_operational_schema`)
+     - 35 operational tables created.
+     - 14 controlled enum types instantiated.
+     - Immutability trigger `trg_operational_events_immutable` deployed and validated.
+     - *Reconciliation Note*: Any draft references to `20260917000001_expedition_operational_schema.sql` in previous roadmaps were typographical; `20260917000000` is the single canonical initial DDL migration.
+  2. **`20260918000001_enable_rls_security_baseline.sql`** (Applied remotely as `enable_rls_security_baseline`)
+     - Row Level Security (RLS) enabled on all 35 operational public tables.
+     - Zero permissive public policies defined; blocks unauthenticated PostgREST / Supabase REST data access.
+     - Backend server retains direct private PostgreSQL access.
 - **Deterministic Baseline Seed**: [supabase/seed.sql](file:///c:/Users/Kshitij%20Parkhe/OneDrive/Desktop/HexaCoder-SIH26062/supabase/seed.sql)
   - Successfully seeded against `tywtsmvccifkugoecrmd`.
   - 1 Expedition (`EXP-26-A`), 3 Missions (`M-08`, `M-02`, `M-05`), 2 Teams (`R-04`, `R-02`), 6 Personnel, 10 Locations.
@@ -71,6 +76,7 @@ This document records the configuration, metadata, and connection architecture f
 - **Hero Operational Chain Verified**:
   `EXP-26-A` ──▶ `M-08` ──▶ `I-42` ──▶ `C-117` ──▶ `PKG-117-01` ──▶ `T-08` (validated via live relational join).
 - **Event Immutability Verified**: Live `UPDATE` and `DELETE` attempts against `operational_events` were rejected with code `P0001`.
+- **RLS Enforcement Verified**: Live database catalogs verify `rowsecurity = true` on all 35 tables with 0 anonymous policies.
 
 ---
 

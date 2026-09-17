@@ -397,3 +397,40 @@ def test_events_have_correlation_ids_and_required_metadata(seed_sql: str):
     assert "f0000000-0000-0000-0000-000000000000" in seed_sql
 
 
+def test_migration_lineage_reconciled():
+    """Verify the migration lineage sequence exists and filenames are authoritative."""
+    migrations_dir = PROJECT_ROOT / "supabase" / "migrations"
+    initial_schema_file = migrations_dir / "20260917000000_expedition_operational_schema.sql"
+    rls_file = migrations_dir / "20260918000001_enable_rls_security_baseline.sql"
+
+    assert initial_schema_file.exists(), f"Canonical initial schema migration missing: {initial_schema_file}"
+    assert rls_file.exists(), f"Security baseline migration missing: {rls_file}"
+
+    # Ensure no conflicting 20260917000001 duplicate migration exists
+    conflicting_file = migrations_dir / "20260917000001_expedition_operational_schema.sql"
+    assert not conflicting_file.exists(), f"Found obsolete duplicate migration: {conflicting_file}"
+
+
+def test_rls_security_migration_covers_all_core_tables():
+    """Verify that 20260918000001_enable_rls_security_baseline.sql enables RLS on all 35 operational tables."""
+    rls_file = PROJECT_ROOT / "supabase" / "migrations" / "20260918000001_enable_rls_security_baseline.sql"
+    content = rls_file.read_text(encoding="utf-8")
+
+    core_tables = [
+        "expeditions", "locations", "missions", "teams", "people", "assignments",
+        "cargo_consignments", "transport_legs", "cargo_packages",
+        "transport_cargo_assignments", "transport_person_assignments", "transport_asset_assignments",
+        "inventory_items", "assets", "inventory_stock_lots", "inventory_transactions", "maintenance_records",
+        "documents", "time_windows", "dependencies", "constraints", "operational_events",
+        "incidents", "incident_people", "incident_assets", "incident_missions", "incident_cargo",
+        "response_actions", "replans", "recommendations", "recommendation_alternatives", "approvals",
+        "audit_log", "sync_queue", "sync_conflicts"
+    ]
+    assert len(core_tables) == 35
+
+    for table in core_tables:
+        pattern = f"ALTER TABLE IF EXISTS public.{table} ENABLE ROW LEVEL SECURITY;"
+        assert pattern in content, f"Table '{table}' missing RLS enablement in security baseline migration"
+
+
+
