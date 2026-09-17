@@ -110,3 +110,19 @@ Target: Complete interactive operator workflows executed in a live browser.
 - Declare station-level emergency incident.
 - Verify lockdown propagation across outdoor transport legs.
 - Verify emergency response checklist and audit logging.
+
+---
+
+## 4. Unified Verification Script & Developer Responsibilities
+
+Both Person A and Person B must maintain and execute automated tests for their respective vertical tracks:
+
+- **Person A**: Tests planning engine, constraint evaluations, human approval state machine, readiness calculations, event persistence, and control tower views.
+- **Person B**: Tests cargo consignments, package validation, transport legs, inventory calculations, asset maintenance schedules, incident response, and offline sync.
+- **Shared Verification Command**:
+  ```powershell
+  # Must pass before any PR is marked ready for review:
+  .\scripts\verify.ps1
+  ```
+- **Playwright Execution**: Interactive user journeys must be verified using Playwright browser tooling. PRs altering UI components or workflows must document successful Playwright execution in the PR description.
+

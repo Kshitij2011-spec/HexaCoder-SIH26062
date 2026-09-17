@@ -54,14 +54,44 @@ Every engineering agent and developer contributing to the HexaCoders codebase mu
   ```
 - Confirm that no unintended files, debug print statements, or secrets are staged.
 
-### Step 8: GIT CHECKPOINT
+### Step 8: GIT CHECKPOINT & PR WORKFLOW
 - Stage only relevant files and create a clean, descriptive Git commit representing that coherent milestone.
-- **DO NOT** push to remote or deploy unless explicitly commanded.
+- **NEVER** commit feature work directly to `main`.
+- Work on dedicated developer branches (`a/<feature>` for Person A, `b/<feature>` for Person B).
+- Rebase onto latest `origin/main` before opening PR.
+- Submit Pull Request using `.github/PULL_REQUEST_TEMPLATE.md`.
+- Person A merges approved PRs into `main` using **Squash and Merge**.
 
 ---
 
-## 2. Rules for Modifying Existing Subsystems
+## 2. Two-Person Parallel Development Loop
+
+```
+Person A (Track A: Planning / Decisions / Controls)
+    └── Branch: a/<feature> ──▶ Rebase origin/main ──▶ PR ──▶ Squash Merge ──┐
+                                                                              │
+                                                                         MAIN TRUNK
+                                                                              │
+Person B (Track B: Logistics / Resources / Incidents)                         │
+    └── Branch: b/<feature> ──▶ Rebase origin/main ──▶ PR ──▶ Squash Merge ──┘
+```
+
+1. **Branch Naming**:
+   - Person A: `a/<feature-name>` (e.g. `a/expedition-service`, `a/replan-engine`)
+   - Person B: `b/<feature-name>` (e.g. `b/cargo-manifests`, `b/incident-triage`)
+   - Shared Contract: `shared/<contract-name>` (e.g. `shared/api-envelope`)
+2. **Strict Domain Non-Intrusion**:
+   - Developers coordinate through explicit public contracts and shared services.
+   - See [docs/CROSS_DOMAIN_PROTOCOL.md](CROSS_DOMAIN_PROTOCOL.md) and [docs/HANDOFF_PROTOCOL.md](HANDOFF_PROTOCOL.md).
+3. **Automated Pre-PR Verification**:
+   - Run `./scripts/verify.ps1` to ensure tests, builds, and sanity checks pass prior to opening PR.
+
+---
+
+## 3. Rules for Modifying Existing Subsystems
 
 1. **Smallest Coherent Change**: Do not refactor an entire module to fix or add a single behavior.
 2. **Preserve Tested Contracts**: Avoid changing public schema signatures or database column names unless an approved migration plan is documented.
 3. **No Blind Rewrites**: Never delete working code to replace it with a newly generated implementation from scratch without verifying that the existing logic was truly defective.
+4. **Additive Migrations Only**: Existing applied migrations under `supabase/migrations/` must never be modified. Create new sequential migration files.
+

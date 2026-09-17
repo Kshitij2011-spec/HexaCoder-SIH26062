@@ -7,9 +7,11 @@ An operational decision support platform for polar expeditions in which changes 
 ---
 
 ## 1. Development Status
-**Current Status**: `DATABASE FOUNDATION / PHASE 1 (Completed)`
+**Current Status**: `PHASE 1.5 — TWO-PERSON COLLABORATION & SPLIT-READINESS (Completed)`
 
-The database schema, migration scripts, constraints, immutability triggers, and deterministic synthetic seed data (45th ISEA baseline) have been established and verified. Full database design documentation is available in [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md). Application business logic, UI screens, and authentication are scheduled for subsequent phases as detailed in [IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
+The database schema, migration scripts, constraints, immutability triggers, and deterministic synthetic seed data (45th ISEA baseline) have been established and verified. Furthermore, the repository is now fully structured for a balanced, two-person engineering team working in parallel (Track A: Planning & Decisions; Track B: Logistics, Resources & Incident Response) with zero direct work on `main`, clean rebase-and-squash merge workflows, and strict cross-domain contracts.
+
+Full collaboration and engineering governance documentation is available in [docs/COLLABORATION_MODEL.md](docs/COLLABORATION_MODEL.md) and [docs/SPLIT_READINESS.md](docs/SPLIT_READINESS.md).
 
 ---
 
@@ -47,6 +49,7 @@ Every user-facing workflow and core logic engine is validated through a three-ti
 1. **Unit Testing**: Validates entity state machines, derivation math, constraint evaluations, and event schema compliance via pytest.
 2. **Integration Testing**: Verifies multi-step cascading pipelines (e.g., cargo delay → mission block → constraint violation) via FastAPI TestClient and PostgreSQL transactions.
 3. **E2E Browser Testing**: Validates real interactive operator journeys and human-approval workflows using genuine Playwright browser automation.
+4. **Unified Verification Script**: `./scripts/verify.ps1` runs all tiers in sequence before any branch merge.
 
 ---
 
@@ -56,6 +59,7 @@ Every user-facing workflow and core logic engine is validated through a three-ti
 | :--- | :--- | :--- |
 | **Phase 0** | Repository Bootstrap, Audit & Engineering Constitution | **Completed** |
 | **Phase 1** | Database Schema, Migrations & Synthetic Seed | **Completed** |
+| **Phase 1.5** | Two-Person Development Architecture & Split-Readiness Foundation | **Completed** |
 | **Phase 2** | Authentication, Roles & Security Baseline | Pending |
 | **Phase 3** | Expedition, Mission, Person & Team Services | Pending |
 | **Phase 4** | Cargo, Package, Transport Leg & Location Modules | Pending |
@@ -78,12 +82,28 @@ Refer to [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md) for fu
 ---
 
 ## 7. Documentation Index
-- [AGENTS.md](AGENTS.md) — Engineering Constitution & Coding Agent Constraints
-- [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) — Canonical Database Schema, Enums, Constraints & Hero Seed Specification
+- [AGENTS.md](AGENTS.md) — Engineering Constitution, Coding Constraints & Collaboration Rules
+- [docs/COLLABORATION_MODEL.md](docs/COLLABORATION_MODEL.md) — Authoritative Two-Person Development & Governance Model
+- [docs/MODULE_OWNERSHIP.md](docs/MODULE_OWNERSHIP.md) — Track A vs Track B Domain Ownership Matrix
+- [docs/GIT_WORKFLOW.md](docs/GIT_WORKFLOW.md) — Git Branching, Rebase & PR Merge Strategy
+- [docs/CROSS_DOMAIN_PROTOCOL.md](docs/CROSS_DOMAIN_PROTOCOL.md) — Cross-Domain Interface & Non-Intrusion Protocol
+- [docs/HANDOFF_PROTOCOL.md](docs/HANDOFF_PROTOCOL.md) — PR Definition of Done & Post-Merge Handoffs
+- [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md) — Local Environment Setup & Toolchain Parity
+- [docs/DEPLOYMENT_OWNERSHIP.md](docs/DEPLOYMENT_OWNERSHIP.md) — Person A Exclusive Deployment & Secrets Authority
+- [docs/ENVIRONMENT_STRATEGY.md](docs/ENVIRONMENT_STRATEGY.md) — Multi-Tier Environment Strategy (.env to Prod)
+- [docs/API_CONTRACT_POLICY.md](docs/API_CONTRACT_POLICY.md) — Versioned API Envelopes (`/api/v1/`) & Error Shapes
+- [docs/EVENT_CONTRACT.md](docs/EVENT_CONTRACT.md) — Immutable Operational Event Schema & Vocabulary
+- [docs/DEPENDENCY_CONTRACT.md](docs/DEPENDENCY_CONTRACT.md) — 15-Verb Semantic Relationship Graph Specification
+- [docs/DATABASE_CHANGE_POLICY.md](docs/DATABASE_CHANGE_POLICY.md) — Migration Governance & Immutability Rules
+- [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) — Canonical Database Schema & Deterministic Hero Seed
+- [docs/DESIGN_SYSTEM_CONTRACT.md](docs/DESIGN_SYSTEM_CONTRACT.md) — Shared UI Component & Semantic Palette Contract
+- [docs/DOMAIN_LANGUAGE.md](docs/DOMAIN_LANGUAGE.md) — Canonical Polar Terminology & Prohibited Aliases
+- [docs/SPLIT_READINESS.md](docs/SPLIT_READINESS.md) — Two-Developer Split-Readiness Evaluation Checklist
 - [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) — Domain Problem, Scenarios & Operational Concept
 - [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md) — Canonical Entities, Dual States, Events & Propagation
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Modular Monolith Architecture & Boundaries
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Modular Monolith Architecture & Strict Layer Boundaries
 - [docs/ENGINEERING_RULES.md](docs/ENGINEERING_RULES.md) — Non-negotiable Rules & Prohibitions
 - [docs/DATA_PROVENANCE.md](docs/DATA_PROVENANCE.md) — Data Classifications & Boundary Statement
 - [docs/TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md) — Unit, Integration & Playwright Test Plans
-- [docs/DEVELOPMENT_WORKFLOW.md](docs/DEVELOPMENT_WORKFLOW.md) — 8-Step Engineering & Git Loop
+- [docs/DEVELOPMENT_WORKFLOW.md](docs/DEVELOPMENT_WORKFLOW.md) — Engineering Loop & PR Protocol
+

@@ -110,3 +110,14 @@ Do not trigger replanning loops after every trivial event. Replanning occurs str
 - Never blindly rewrite functional subsystems.
 - Do not push to remote repositories or deploy without explicit instructions.
 - Commit in coherent, verifiable milestones with descriptive messages.
+
+### 9. Two-Person Parallel Development Rule
+- **Balanced Vertical Tracks**: Development is split between Person A (Track A: Planning, Decision, Controls, Platform Integration) and Person B (Track B: Logistics, Cargo, Transport, Inventory, Assets, Incident Response). Both own substantial product surfaces.
+- **Main as Integration Trunk**: Neither developer works directly on `main`. Feature work occurs on `a/<feature>` and `b/<feature>` branches.
+- **Pull Requests & Rebase**: Features are integrated via Pull Requests using squash-and-merge. Branches must rebase onto `main` prior to PR completion.
+- **Explicit Cross-Domain Contracts**: A developer must not modify another developer's internal domain logic. Cross-domain interactions must use public domain services or API contracts.
+
+### 10. Deployment & Infrastructure Authority Rule
+- **Person A Exclusive Authority**: Only Person A has authority over production deployments (Vercel, Render), production environment secrets, production Supabase configuration, and final merge authority into `main`.
+- **Developer Independence**: Person B develops, tests, and validates independently without needing production secrets or direct deployment access.
+

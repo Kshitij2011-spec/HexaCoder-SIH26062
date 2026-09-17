@@ -91,12 +91,12 @@ Rather than scattering logic across isolated CRUD endpoints, business rules are 
 
 ---
 
-## 3. Modular Backend Structure
+## 3. Modular Backend Structure & Strict Layering
 
 ```
 backend/
 ├── app/
-│   ├── api/                     # FastAPI Route Controllers
+│   ├── api/                     # FastAPI Route Controllers & Envelope Wrappers
 │   │   ├── v1/
 │   │   │   ├── expeditions.py
 │   │   │   ├── missions.py
@@ -108,7 +108,6 @@ backend/
 │   │   │   ├── transport.py
 │   │   │   ├── locations.py
 │   │   │   ├── incidents.py
-│   │   │   ├── documents.py
 │   │   │   ├── events.py
 │   │   │   ├── dependencies.py
 │   │   │   ├── constraints.py
@@ -117,27 +116,45 @@ backend/
 │   │   │   ├── approvals.py
 │   │   │   └── sync.py
 │   │   └── api_router.py
-│   ├── core/                    # App configuration, security, DB session
+│   ├── core/                    # App configuration, security, auth guards
 │   │   ├── config.py
-│   │   ├── security.py
-│   │   └── database.py
-│   ├── models/                  # SQLAlchemy ORM Models
-│   ├── schemas/                 # Pydantic Schemas (DTOs)
-│   ├── services/                # Shared Domain Engine Services
-│   │   ├── event_service.py
-│   │   ├── dependency_service.py
-│   │   ├── impact_service.py
-│   │   ├── constraint_service.py
-│   │   ├── readiness_service.py
-│   │   ├── replanning_service.py
-│   │   ├── approval_service.py
-│   │   ├── audit_service.py
-│   │   └── sync_service.py
-│   └── main.py                  # Application entry point
-├── tests/                       # Backend test suite
+│   │   └── security.py
+│   ├── db/                      # Session management, engine, base metadata
+│   │   ├── database.py
+│   │   └── base.py
+│   ├── domains/                 # Independent Product Domain Modules
+│   │   ├── expeditions/         # Track A: Expedition domain models, schemas, repos
+│   │   ├── missions/            # Track A: Mission domain models, schemas, repos
+│   │   ├── people/              # Track A: Person domain models, schemas, repos
+│   │   ├── teams/               # Track A: Team domain models, schemas, repos
+│   │   ├── cargo/               # Track B: Cargo Consignments & Package models
+│   │   ├── transport/           # Track B: Transport Leg & Manifest models
+│   │   ├── locations/           # Track B: Station & field depot models
+│   │   ├── inventory/           # Track B: Stock Lot & inventory balance models
+│   │   ├── assets/              # Track B: Durable Asset & maintenance models
+│   │   └── incidents/           # Track B: Polar Incident & response action models
+│   ├── services/                # Cross-Cutting & Decision Engines
+│   │   ├── events/              # Event Journal, immutability & listeners
+│   │   ├── dependencies/        # Semantic graph traversals & cycle checks
+│   │   ├── constraints/         # Operational constraint evaluation engine
+│   │   ├── planning/            # Deterministic replanning & impact engine
+│   │   ├── recommendations/     # Mitigation solver & recommendation generator
+│   │   ├── approvals/           # Human-in-the-loop approval state machine
+│   │   ├── audit/               # Provenance & tamper-evident audit logs
+│   │   └── sync/                # Store-and-forward offline synchronization
+│   └── main.py                  # Application entry point & lifespan
+├── tests/                       # Backend test suite (pytest)
 ├── requirements.txt
 └── pyproject.toml
 ```
+
+### 3.1 Strict Domain Non-Intrusion Rule
+**Domain modules MUST NOT import or depend on another domain's private internal implementations.**
+- A feature in `domains/cargo/` cannot directly manipulate private state in `domains/missions/`.
+- Cross-domain interactions must occur strictly through:
+  1. **Shared Services** (e.g., `services/dependencies/`, `services/events/`).
+  2. **Public Domain Interfaces / Contracts** (e.g. `mission_service.get_mission_manifest_requirements()`).
+  3. **Versioned REST API Endpoints** (`/api/v1/...`).
 
 ---
 
@@ -146,27 +163,28 @@ backend/
 ```
 frontend/
 ├── src/
-│   ├── assets/                  # Static assets & icons
-│   ├── components/              # Shared UI components
-│   │   ├── ui/                  # shadcn/ui primitives (Button, Dialog, etc.)
-│   │   ├── layout/              # Header, Sidebar, Navigation
-│   │   └── common/              # Status badges, Provenance tags
-│   ├── features/                # Domain-centric feature modules
-│   │   ├── control-tower/       # Unified operational overview & alerts
-│   │   ├── expeditions/         # Expedition setup and monitoring
-│   │   ├── missions/            # Mission readiness & timeline view
-│   │   ├── cargo/               # Consignments & package tracking
-│   │   ├── inventory/           # Stock levels, reserves, alerts
-│   │   ├── assets/              # Fleet & heavy machinery maintenance
-│   │   ├── personnel/           # Rosters, certifications, teams
-│   │   ├── transport/           # Movement legs & schedules
-│   │   ├── incidents/           # Emergency response workflows
-│   │   └── replanning/          # Recommendation review & approval modal
-│   ├── hooks/                   # Custom React hooks (TanStack Query wrappers)
-│   ├── lib/                     # API client, utility functions
-│   ├── types/                   # TypeScript domain contracts
-│   ├── App.tsx
-│   └── main.tsx
+│   ├── app/                     # App shell, root routing, global layout, navigation
+│   ├── components/
+│   │   ├── shared/              # Shared high-level domain-agnostic UI (OperationalTable, StatusBadge)
+│   │   └── ui/                  # Design system primitives (shadcn / Radix primitives)
+│   ├── features/                # Domain-specific feature modules
+│   │   ├── expeditions/         # Track A: Expedition management views
+│   │   ├── missions/            # Track A: Mission tracking & readiness
+│   │   ├── people/              # Track A: Roster and polar medical/skills
+│   │   ├── teams/               # Track A: Field team formation & assignments
+│   │   ├── planning/            # Track A: Replanning workspace & constraint matrix
+│   │   ├── control-tower/       # Track A: Integrated situational dashboard
+│   │   ├── cargo/               # Track B: Cargo manifests & hazmat handling
+│   │   ├── transport/           # Track B: Multimodal transport legs & tracking
+│   │   ├── locations/           # Track B: Station & field depot management
+│   │   ├── inventory/           # Track B: Stock lot tracking & fuel levels
+│   │   ├── assets/              # Track B: Vehicle & machinery maintenance
+│   │   ├── incidents/           # Track B: Polar incidents & response actions
+│   │   └── sync/                # Track B: Offline sync & local queue drawer
+│   └── lib/
+│       ├── api/                 # Single shared API client & TanStack Query base
+│       ├── hooks/               # Shared React hooks (auth, spatial, keyboard)
+│       └── types/               # Shared TypeScript schemas and contract types
 ├── package.json
 ├── tsconfig.json
 └── vite.config.ts

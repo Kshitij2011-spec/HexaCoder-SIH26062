@@ -9,23 +9,30 @@ The development sequence for HexaCoders builds foundational domain reality befor
 
 ## Roadmap Phases
 
-### [CURRENT] Phase 0: Repository Bootstrap & Engineering Constitution
+### [COMPLETED] Phase 0: Repository Bootstrap & Engineering Constitution
 - Audit environment, tools, and runtime capabilities.
 - Establish architectural principles and strict engineering rules.
 - Author canonical documentation (`PROJECT_CONTEXT`, `DOMAIN_MODEL`, `ARCHITECTURE`, etc.).
 - Scaffold baseline repository layout.
-- Initial Git milestone checkpoint.
+- Initial Git milestone checkpoint (`1218878`).
 
-### Phase 1: Database Schema, Migrations & Synthetic Baseline Seed
+### [COMPLETED] Phase 1: Database Schema, Migrations & Synthetic Baseline Seed
 - Configure Supabase / PostgreSQL schema with PostGIS extension.
-- Create DDL migrations for core entities:
-  - `expeditions`, `missions`, `people`, `teams`, `locations`, `assets`, `inventory`, `cargo_consignments`, `cargo_packages`, `transport_legs`, `documents`, `time_windows`.
-  - `operational_events` (immutable event log).
-  - `entity_dependencies` (semantic relationship graph).
-  - `constraints`, `replans`, `recommendations`, `approvals`.
-- Develop synthetic seed generator matching 45th ISEA parameters.
+- Author authoritative DDL migration `20260917000001_expedition_operational_schema.sql`.
+- Author deterministic synthetic seed generator (`supabase/seed.sql`) matching 45th ISEA parameters.
+- 24/24 unit and database schema tests verified passing (`2cd861f`).
 
-### Phase 2: Authentication, Roles & Security Baseline
+### [COMPLETED] Phase 1.5: Two-Person Development Architecture & Split-Readiness Foundation
+- Establish balanced two-person vertical track engineering model:
+  - **Track A (Person A)**: Planning, Decision, Controls, Platform Integration.
+  - **Track B (Person B)**: Logistics, Resources, Assets, Incident Response.
+- Define git workflow (`a/*`, `b/*` branches, pre-PR rebase, squash-and-merge on `main`).
+- Establish strict cross-domain contract protocol and non-intrusion rules.
+- Scaffolding frontend architecture directories (`frontend/src/`).
+- Create unified verification test script (`scripts/verify.ps1`).
+- Author PR template, CODEOWNERS, and collaboration contracts.
+
+### Phase 2: Authentication, Roles & Security Baseline (Shared / Person A initially)
 - JWT-based authentication using FastAPI security utilities.
 - Role-Based Access Control (RBAC):
   - `EXPEDITION_LEADER`
@@ -34,6 +41,7 @@ The development sequence for HexaCoders builds foundational domain reality befor
   - `STATION_COMMANDER`
   - `FIELD_OPERATOR`
 - Audit trail middleware capturing user identity and IP/timestamp on every mutating request.
+
 
 ### Phase 3: Core Expedition, Mission, Person & Team Services
 - Domain models and FastAPI endpoints for Expedition lifecycle.

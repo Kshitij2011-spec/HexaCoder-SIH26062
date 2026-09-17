@@ -1,0 +1,49 @@
+# ============================================================
+# SIH26062 — HexaCoders GitHub CODEOWNERS Configuration
+# ============================================================
+# Person A (Project Head / Integration Owner): @Kshitij2011-spec
+# Person B (Parallel Engineering Developer): [Assigned upon team repo invite]
+# Note: CODEOWNERS provides review visibility. It does not block cross-domain contributions.
+
+# Default: Person A as integration owner
+* @Kshitij2011-spec
+
+# Infrastructure, CI/CD & Deployments (Person A exclusive)
+/.github/workflows/ @Kshitij2011-spec
+/render.yaml @Kshitij2011-spec
+/vercel.json @Kshitij2011-spec
+/scripts/deploy* @Kshitij2011-spec
+
+# Track A: Decision Intelligence, Expeditions & Control Tower (Person A primary)
+/backend/app/domains/expeditions/ @Kshitij2011-spec
+/backend/app/domains/missions/ @Kshitij2011-spec
+/backend/app/domains/people/ @Kshitij2011-spec
+/backend/app/domains/teams/ @Kshitij2011-spec
+/backend/app/services/constraints/ @Kshitij2011-spec
+/backend/app/services/planning/ @Kshitij2011-spec
+/backend/app/services/recommendations/ @Kshitij2011-spec
+/backend/app/services/approvals/ @Kshitij2011-spec
+/frontend/src/features/control-tower/ @Kshitij2011-spec
+/frontend/src/features/planning/ @Kshitij2011-spec
+
+# Track B: Logistics, Inventory, Fleet Assets, Incidents & Offline Sync (Person B primary)
+# Replace placeholder once Person B GitHub handle is linked to repo
+/backend/app/domains/cargo/ @Kshitij2011-spec
+/backend/app/domains/transport/ @Kshitij2011-spec
+/backend/app/domains/locations/ @Kshitij2011-spec
+/backend/app/domains/inventory/ @Kshitij2011-spec
+/backend/app/domains/assets/ @Kshitij2011-spec
+/backend/app/domains/incidents/ @Kshitij2011-spec
+/backend/app/services/sync/ @Kshitij2011-spec
+/frontend/src/features/cargo/ @Kshitij2011-spec
+/frontend/src/features/inventory/ @Kshitij2011-spec
+/frontend/src/features/assets/ @Kshitij2011-spec
+/frontend/src/features/incidents/ @Kshitij2011-spec
+
+# Shared Platform & Architecture (Co-owned)
+/docs/ @Kshitij2011-spec
+/supabase/ @Kshitij2011-spec
+/backend/app/core/ @Kshitij2011-spec
+/backend/app/db/ @Kshitij2011-spec
+/backend/app/services/events/ @Kshitij2011-spec
+/backend/app/services/dependencies/ @Kshitij2011-spec
