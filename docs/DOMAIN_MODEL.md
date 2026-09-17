@@ -189,7 +189,7 @@ This document defines the authoritative domain entities, states, semantic relati
 
 ### 1.15 SUPPORTING OPERATIONAL ENTITIES
 - **CONSTRAINT**: A rule evaluated against current state (e.g., `FuelReserveFloor`, `MinTeamStaffing`, `HazardousSegregation`, `TimeWindowAdherence`).
-- **REPLAN**: A structured operational recommendation package triggered when a hard constraint is broken.
+- **REPLAN**: A structured operational recommendation package triggered when a hard constraint is broken, an important operational requirement becomes infeasible, or an authorized operator manually requests replanning.
 - **RECOMMENDATION**: Specific alternative proposed by the replan engine (e.g., "Reallocate Snowcat PB-02 to Mission Gamma").
 - **APPROVAL**: The auditable decision record authored by an authorized operator accepting or rejecting a recommendation.
 - **RESPONSE ACTION**: Action item dispatched during an incident response workflow.
@@ -246,7 +246,7 @@ The deterministic state propagation pipeline is executed in shared backend domai
               ↓
   5. Evaluate Constraints against Recalculated State
               ↓
-  6. Are any Hard Constraints Violated?
+  6. Are any Hard Constraints Violated OR Requirements Infeasible?
      ├── NO  → Terminate pipeline, broadcast updated state
      └── YES → Formulate Planning Problem
                     ↓

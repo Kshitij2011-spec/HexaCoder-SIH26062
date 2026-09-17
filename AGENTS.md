@@ -78,7 +78,7 @@ Entities are connected through strict, semantic relationships.
 Do not trigger replanning loops after every trivial event. Replanning occurs strictly when:
 - A meaningful state change occurs,
 - **AND** a dependency chain is affected,
-- **AND** a hard constraint is violated,
+- **AND** (a hard constraint is violated **OR** an important operational requirement becomes infeasible),
 - **OR** an authorized expedition operator manually requests replanning.
 
 ### 4. The Human Approval Rule

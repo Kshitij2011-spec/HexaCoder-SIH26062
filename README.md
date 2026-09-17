@@ -7,9 +7,9 @@ An operational decision support platform for polar expeditions in which changes 
 ---
 
 ## 1. Development Status
-**Current Status**: `BOOTSTRAP / ARCHITECTURE PHASE (Phase 0)`
+**Current Status**: `DATABASE FOUNDATION / PHASE 1 (Completed)`
 
-The repository has been audited, the engineering constitution and domain architecture have been established, and baseline scaffolding is in place. Application business logic, UI screens, and database schemas are scheduled for subsequent phases as detailed in [IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
+The database schema, migration scripts, constraints, immutability triggers, and deterministic synthetic seed data (45th ISEA baseline) have been established and verified. Full database design documentation is available in [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md). Application business logic, UI screens, and authentication are scheduled for subsequent phases as detailed in [IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
 
 ---
 
@@ -55,7 +55,7 @@ Every user-facing workflow and core logic engine is validated through a three-ti
 | Phase | Description | Status |
 | :--- | :--- | :--- |
 | **Phase 0** | Repository Bootstrap, Audit & Engineering Constitution | **Completed** |
-| **Phase 1** | Database Schema, Migrations & Synthetic Seed | Pending |
+| **Phase 1** | Database Schema, Migrations & Synthetic Seed | **Completed** |
 | **Phase 2** | Authentication, Roles & Security Baseline | Pending |
 | **Phase 3** | Expedition, Mission, Person & Team Services | Pending |
 | **Phase 4** | Cargo, Package, Transport Leg & Location Modules | Pending |
@@ -79,6 +79,7 @@ Refer to [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md) for fu
 
 ## 7. Documentation Index
 - [AGENTS.md](AGENTS.md) — Engineering Constitution & Coding Agent Constraints
+- [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) — Canonical Database Schema, Enums, Constraints & Hero Seed Specification
 - [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) — Domain Problem, Scenarios & Operational Concept
 - [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md) — Canonical Entities, Dual States, Events & Propagation
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Modular Monolith Architecture & Boundaries

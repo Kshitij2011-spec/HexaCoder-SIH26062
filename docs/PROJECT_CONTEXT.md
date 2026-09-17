@@ -70,7 +70,7 @@ AUDIT
 3. **DEPENDENCIES**: The graph of semantic relationships linking entities (e.g., `Mission X REQUIRES Asset Y`, `Asset Y DEPENDS_ON Cargo Z`).
 4. **IMPACT**: Computation of derived statuses across all connected nodes in the dependency chain.
 5. **CONSTRAINTS**: Verification against hard rules (survival limits, fuel minimums, minimum crew qualifications, weather windows, equipment availability).
-6. **REPLAN**: Automated synthesis of actionable mitigation options and recommendations when hard constraints are violated.
+6. **REPLAN**: Automated synthesis of actionable mitigation options and recommendations when hard constraints are violated, an important operational requirement becomes infeasible, or an authorized operator requests replanning.
 7. **HUMAN APPROVAL**: Explicit review, justification, and sign-off by the authorized expedition officer.
 8. **UPDATE**: Atomic state transition applied across affected entities.
 9. **AUDIT**: Immutable recording of the full event chain, decisions made, and rationale.
