@@ -32,6 +32,19 @@ The development sequence for HexaCoders builds foundational domain reality befor
 - Create unified verification test script (`scripts/verify.ps1`).
 - Author PR template, CODEOWNERS, and collaboration contracts.
 
+### [COMPLETED] Phase 1.75: Shared Supabase Development Environment & Real Database Verification
+- Dedicated development Supabase project created (`HexaCoders SIH26062 DEV`, project ref: `tywtsmvccifkugoecrmd`, region: `ap-south-1` Mumbai).
+- Legacy project isolation confirmed: old `krishi-sahayak` project completely untouched.
+- Applied canonical DDL migration (`20260917000000_expedition_operational_schema.sql`) to live PostgreSQL 17.6 database: 35 tables, 14 enums, spatial types, immutability trigger, foreign keys, and indexes created.
+- Applied deterministic synthetic baseline seed (`supabase/seed.sql`) to live database across 4 transactional batches with zero errors.
+- Verified live database counts: 1 expedition, 3 missions, 2 teams, 6 people, 10 locations, 3 cargo consignments, 8 packages, 5 transport legs, 10 inventory items, 11 stock lots, 6 assets, 5 maintenance records, 8 documents, 6 time windows, 17 dependencies, 10 operational events, 6 constraints, 2 incidents, 2 response actions.
+- Verified Hero Chain relational connectivity in real DB: `EXP-26-A` → `M-08` → `I-42` → `C-117` → `PKG-117-01` → `T-08`.
+- Verified operational event immutability on live DB (UPDATE and DELETE attempts rejected by trigger exception `P0001`).
+- Verified domain invariants on live DB: inventory allocation formula, time window sequencing, and transport temporal validity.
+- Verified foreign key rejection behavior on invalid insert attempt.
+- Configured backend environment connection (`DATABASE_URL`, `SUPABASE_DB_URL`, `API_BASE_URL`) and non-leaking DB health check helper (`get_db_health()`).
+- Documented project details in `docs/SUPABASE_DEVELOPMENT.md` and updated team workflow policies.
+
 ### Phase 2: Authentication, Roles & Security Baseline (Shared / Person A initially)
 - JWT-based authentication using FastAPI security utilities.
 - Role-Based Access Control (RBAC):

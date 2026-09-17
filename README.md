@@ -7,11 +7,11 @@ An operational decision support platform for polar expeditions in which changes 
 ---
 
 ## 1. Development Status
-**Current Status**: `PHASE 1.5 — TWO-PERSON COLLABORATION & SPLIT-READINESS (Completed)`
+**Current Status**: `PHASE 1.75 — SHARED SUPABASE DEV & REAL DATABASE VERIFICATION (Completed)`
 
-The database schema, migration scripts, constraints, immutability triggers, and deterministic synthetic seed data (45th ISEA baseline) have been established and verified. Furthermore, the repository is now fully structured for a balanced, two-person engineering team working in parallel (Track A: Planning & Decisions; Track B: Logistics, Resources & Incident Response) with zero direct work on `main`, clean rebase-and-squash merge workflows, and strict cross-domain contracts.
+The canonical database schema, spatial extensions, operational event immutability triggers, and deterministic synthetic seed data (45th ISEA baseline) have been applied and verified against an authentic, dedicated Supabase PostgreSQL 17 development instance (`HexaCoders SIH26062 DEV` in region `ap-south-1`). Furthermore, the repository is fully structured for a balanced two-person engineering team working in parallel (Track A: Planning & Decisions; Track B: Logistics, Resources & Incident Response) with zero direct work on `main`, clean rebase-and-squash merge workflows, strict cross-domain contracts, and a shared development database environment.
 
-Full collaboration and engineering governance documentation is available in [docs/COLLABORATION_MODEL.md](docs/COLLABORATION_MODEL.md) and [docs/SPLIT_READINESS.md](docs/SPLIT_READINESS.md).
+Full documentation is available in [docs/SUPABASE_DEVELOPMENT.md](docs/SUPABASE_DEVELOPMENT.md), [docs/COLLABORATION_MODEL.md](docs/COLLABORATION_MODEL.md), and [docs/SPLIT_READINESS.md](docs/SPLIT_READINESS.md).
 
 ---
 
@@ -60,6 +60,7 @@ Every user-facing workflow and core logic engine is validated through a three-ti
 | **Phase 0** | Repository Bootstrap, Audit & Engineering Constitution | **Completed** |
 | **Phase 1** | Database Schema, Migrations & Synthetic Seed | **Completed** |
 | **Phase 1.5** | Two-Person Development Architecture & Split-Readiness Foundation | **Completed** |
+| **Phase 1.75** | Shared Supabase Development Environment & Real Database Verification | **Completed** |
 | **Phase 2** | Authentication, Roles & Security Baseline | Pending |
 | **Phase 3** | Expedition, Mission, Person & Team Services | Pending |
 | **Phase 4** | Cargo, Package, Transport Leg & Location Modules | Pending |
@@ -83,6 +84,7 @@ Refer to [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md) for fu
 
 ## 7. Documentation Index
 - [AGENTS.md](AGENTS.md) — Engineering Constitution, Coding Constraints & Collaboration Rules
+- [docs/SUPABASE_DEVELOPMENT.md](docs/SUPABASE_DEVELOPMENT.md) — Dedicated Shared Supabase Development Environment Specification
 - [docs/COLLABORATION_MODEL.md](docs/COLLABORATION_MODEL.md) — Authoritative Two-Person Development & Governance Model
 - [docs/MODULE_OWNERSHIP.md](docs/MODULE_OWNERSHIP.md) — Track A vs Track B Domain Ownership Matrix
 - [docs/GIT_WORKFLOW.md](docs/GIT_WORKFLOW.md) — Git Branching, Rebase & PR Merge Strategy

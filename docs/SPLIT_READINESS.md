@@ -43,12 +43,25 @@ The internal repository architecture, domain boundaries, database foundation, mi
 - [x] Local development instructions reproducible in `docs/LOCAL_DEVELOPMENT.md`.
 - [x] No developer depends on private or undocumented local machine configurations.
 
-### Database & Seed Integrity
-- [x] Comprehensive migration exists (`supabase/migrations/20260917000001_expedition_operational_schema.sql`).
+### Database & Seed Integrity (Static Baseline)
+- [x] Comprehensive migration exists (`supabase/migrations/20260917000000_expedition_operational_schema.sql`).
 - [x] Deterministic seed data exists (`supabase/seed.sql`).
 - [x] Stable hero scenario entities (`EXP-26-A`, `M-08`, `R-04`, `I-42`, `C-117`, `T-08`) established with fixed UUIDs.
 - [x] Data provenance rules enforced across all records.
-- [x] 24/24 backend database and seed tests pass via pytest.
+- [x] 25/25 backend database, seed, and diagnostic health tests pass via pytest.
+
+### Real Database Verification (Supabase DEV: `tywtsmvccifkugoecrmd`)
+- [x] Dedicated SIH26062 DEV Supabase project exists (`tywtsmvccifkugoecrmd` in `ap-south-1`).
+- [x] Old Krishi Sahayak project completely untouched and isolated.
+- [x] Migration applied to real PostgreSQL database (35 operational tables confirmed).
+- [x] Seed applied to real PostgreSQL database (all 20 seed sections executed).
+- [x] Real database schema verified (all enums, check constraints, foreign keys active).
+- [x] Hero chain verified in real DB (`EXP-26-A` ──▶ `M-08` ──▶ `I-42` ──▶ `C-117` ──▶ `PKG-117-01` ──▶ `T-08`).
+- [x] Operational event immutability verified against real DB (`UPDATE` and `DELETE` rejected by trigger `P0001`).
+- [x] Database connection verified (`check_db_connectivity` and `get_db_health` tested).
+- [x] Both developers can independently configure DEV access via `.env.example`.
+- [x] Production remains strictly separate (Person A only).
+
 
 ### Infrastructure & Deployment Authority
 - [x] Exclusive production deployment authority assigned to Person A in `docs/DEPLOYMENT_OWNERSHIP.md`.

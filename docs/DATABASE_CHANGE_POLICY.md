@@ -42,3 +42,22 @@ The deterministic seed script `supabase/seed.sql` represents the single shared o
    - Developers may append domain-specific scenario records (e.g. additional skidoos, extra ration boxes) to the designated sections in `supabase/seed.sql`.
    - All added seed records must have fixed, deterministic UUIDs and carry `data_provenance = 'SYNTHETIC_DEMO'`.
 3. **No Breaking Modifications to Existing Seed**: A developer must not delete or modify another developer's seeded records without explicit agreement.
+
+---
+
+## 4. Shared Development Database Safety Rules
+
+1. **No Manual Remote Schema Edits**: Never manually edit remote schema using arbitrary SQL outside tracked migrations.
+2. **Schema Changes Require Migration Files**: Every schema evolution must exist as an authored `.sql` file in `supabase/migrations/`.
+3. **Applied Migrations Are Never Edited**: Forward migrations only.
+4. **Feature Branch Migrations**: Developers may author new migrations on `a/<feature>` or `b/<feature>` branches.
+5. **Pre-Merge Migration Rebase**: Before opening a PR or merging into `main`, the developer must:
+   - Rebase against latest `origin/main`.
+   - Verify migration sequence and timestamp ordering.
+   - Confirm zero conflicting migration file names.
+   - Run `./scripts/verify.ps1` to validate schema assertions.
+6. **Coordinated Remote Operations**: Destructive development database operations (e.g. table resets, data purges) require explicit coordination between Person A and Person B.
+7. **No Casual Database Drops**: No developer may casually drop or reset the shared development database (`tywtsmvccifkugoecrmd`).
+8. **Seed Baseline is Canonical**: `supabase/seed.sql` is the authoritative source for demo data.
+9. **Documented Seed Additions**: Domain-specific seed additions must be intentional, well-commented, and preserve data provenance (`SYNTHETIC_DEMO`).
+

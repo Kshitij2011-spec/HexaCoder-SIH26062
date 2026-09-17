@@ -86,3 +86,21 @@ The **Shared Platform** is not a third developer; it is the shared foundation th
 2. **Contract-First Collaboration**: If Person A needs a cargo status, or Person B needs mission readiness, they consume public service contracts rather than reaching into each other's domain internals.
 3. **Small, Focused Pull Requests**: PRs should encapsulate a single domain capability or milestone, accompanied by automated tests.
 4. **Autonomous Local Environments**: Both developers run identical local setups (Python 3.13, Node 22, local seed data) without relying on each other's machines.
+
+---
+
+## 6. Shared Development Database & Infrastructure Boundaries
+
+The team connects to a dedicated, remote Supabase development database:
+
+| Responsibility | Person A (Project Head) | Person B (Parallel Developer) |
+|---|---|---|
+| **DEV Database Access** | Full access to `tywtsmvccifkugoecrmd` | Full access to `tywtsmvccifkugoecrmd` |
+| **Schema Inspection & Testing**| Full access to test & inspect | Full access to test & inspect |
+| **Feature Migrations** | Authors migrations via `a/*` PRs | Authors migrations via `b/*` PRs |
+| **Production Database Access** | **Exclusive authority** | **Zero access / no production secrets** |
+| **Production Deployments** | **Exclusive authority (Vercel/Render)**| **No deployment authority** |
+
+### Key Workflow Rule:
+Person B develops completely independently against the shared development database (`tywtsmvccifkugoecrmd`) using developer-level credentials without needing Person A's laptop or private production keys.
+

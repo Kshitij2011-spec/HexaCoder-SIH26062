@@ -123,25 +123,38 @@ The frontend development server runs on `http://localhost:5173`.
 
 ---
 
-## 7. Database & Supabase Local Setup
+## 7. Database Connection Modes
 
-When developing locally with the Supabase CLI:
+The project supports two development database workflows:
+
+### MODE A: Shared Supabase Development Database (Primary & Supported)
+**This is the immediate supported team workflow** because local workstations do not require Docker Desktop or local PostgreSQL installations.
+- Both Person A and Person B connect their local FastAPI backends to the shared Supabase DEV project:
+  - **Project ID**: `tywtsmvccifkugoecrmd`
+  - **Host**: `db.tywtsmvccifkugoecrmd.supabase.co`
+  - **Region**: `ap-south-1` (Mumbai, India)
+- Set in `.env`:
+  ```ini
+  DATABASE_URL=postgresql://postgres:[DEV_PASSWORD]@db.tywtsmvccifkugoecrmd.supabase.co:5432/postgres
+  SUPABASE_URL=https://tywtsmvccifkugoecrmd.supabase.co
+  SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+  ```
+- Migrations and deterministic seeds are already applied and validated on this instance.
+
+### MODE B: Future Optional Local PostgreSQL / Supabase CLI
+For fully offline development when Docker Desktop is available:
 ```bash
-# Start local Supabase containers (requires Docker Desktop)
+# Start local Supabase containers
 npx supabase start
 
-# Apply authoritative migrations
+# Apply authoritative migrations & seed
 npx supabase db reset
-
-# Verify seed data is applied (seed.sql runs automatically on reset)
+```
+Configure `.env` with local connection string:
+```ini
+DATABASE_URL=postgresql://postgres:postgres@localhost:54322/postgres
 ```
 
-If connecting to an external development PostgreSQL database:
-```bash
-# Apply migrations manually via psql
-psql "$DATABASE_URL" -f supabase/migrations/20260917000001_expedition_operational_schema.sql
-psql "$DATABASE_URL" -f supabase/seed.sql
-```
 
 ---
 

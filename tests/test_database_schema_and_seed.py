@@ -4,7 +4,8 @@ import re
 import pytest
 from pathlib import Path
 from backend.app.core.config import Settings, settings
-from backend.app.db.session import check_db_connectivity
+from backend.app.db.session import check_db_connectivity, get_db_health
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MIGRATION_FILE = PROJECT_ROOT / "supabase" / "migrations" / "20260917000000_expedition_operational_schema.sql"
@@ -286,6 +287,21 @@ def test_backend_db_connectivity_helper():
     # When no local Postgres server is running, helper returns False gracefully without crashing
     connected = check_db_connectivity()
     assert isinstance(connected, bool)
+
+
+def test_backend_db_health_helper():
+    """Verify get_db_health diagnostic returns structured status without exposing secrets."""
+    health = get_db_health()
+    assert isinstance(health, dict)
+    assert "status" in health
+    assert "database_reachable" in health
+    assert isinstance(health["database_reachable"], bool)
+    # Verify no credentials leaked in output
+    for val in health.values():
+        val_str = str(val).lower()
+        assert "password" not in val_str
+        assert "postgres:" not in val_str
+
 
 
 # ============================================================

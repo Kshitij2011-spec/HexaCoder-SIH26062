@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     PROJECT_NAME: str = "HexaCoders - SIH26062"
     API_V1_STR: str = "/api/v1"
+    API_BASE_URL: str = "http://localhost:8000/api/v1"
 
     # Database Configuration (PostgreSQL / Supabase)
     POSTGRES_SERVER: str = "localhost"
@@ -29,6 +30,10 @@ class Settings(BaseSettings):
         default=None,
         description="Direct PostgreSQL connection string"
     )
+    SUPABASE_DB_URL: Optional[str] = Field(
+        default=None,
+        description="Direct Supabase PostgreSQL connection string"
+    )
 
     # Supabase platform settings
     SUPABASE_URL: Optional[str] = None
@@ -39,7 +44,10 @@ class Settings(BaseSettings):
         """Return canonical database URL."""
         if self.DATABASE_URL:
             return self.DATABASE_URL
+        if self.SUPABASE_DB_URL:
+            return self.SUPABASE_DB_URL
         return f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
 
 
 settings = Settings()

@@ -38,3 +38,24 @@ def check_db_connectivity() -> bool:
             return result.scalar() == 1
     except Exception:
         return False
+
+
+def get_db_health() -> dict:
+    """Diagnostic health check verifying PostgreSQL connection status without exposing credentials."""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT version();"))
+            row = result.scalar()
+            version_summary = str(row).split(",")[0] if row else "PostgreSQL"
+            return {
+                "status": "HEALTHY",
+                "database_reachable": True,
+                "version_summary": version_summary
+            }
+    except Exception as exc:
+        return {
+            "status": "UNHEALTHY",
+            "database_reachable": False,
+            "error_type": exc.__class__.__name__
+        }
+
