@@ -11,6 +11,7 @@ from backend.app.domains.transport.router import router as transport_router
 from backend.app.domains.cargo.router import router as cargo_router
 from backend.app.domains.inventory.router import router as inventory_router
 from backend.app.domains.assets.router import router as assets_router
+from backend.app.domains.incidents.router import router as incidents_router
 from backend.app.platform.events.router import router as events_router
 from backend.app.db.session import get_db_health
 from backend.app.core.config import settings
@@ -50,6 +51,7 @@ api_v1_router.include_router(transport_router)
 api_v1_router.include_router(cargo_router)
 api_v1_router.include_router(inventory_router)
 api_v1_router.include_router(assets_router)
+api_v1_router.include_router(incidents_router)
 api_v1_router.include_router(events_router)
 
 __all__ = ["api_v1_router"]
