@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 from backend.app.db.session import get_db
 from backend.app.domains.incidents.service import IncidentService
+from backend.app.domains.incidents.propagation import IncidentPropagationService
 from backend.app.domains.incidents.schemas import (
     IncidentCreate,
     IncidentUpdate,
@@ -14,6 +15,8 @@ from backend.app.domains.incidents.schemas import (
     IncidentReferenceCreate,
     IncidentReferenceRead,
     IncidentTimelineRead,
+    IncidentPropagationSummary,
+    IncidentPropagationRead,
 )
 from backend.app.shared.schemas.envelope import (
     ApiResponse,
@@ -284,3 +287,48 @@ def add_incident_reference(
         data=IncidentReferenceRead.model_validate(ref).model_dump(),
         correlation_id=str(cid) if cid else request.headers.get("X-Request-ID"),
     )
+
+
+# ============================================================
+# 5. CROSS-DOMAIN OPERATIONAL PROPAGATION
+# ============================================================
+
+@router.post("/{incident_id}/propagate", response_model=ApiResponse)
+def propagate_incident(
+    request: Request,
+    incident_id: uuid.UUID,
+    session: Session = Depends(get_db),
+):
+    """
+    Explicitly triggers controlled cross-domain operational impact propagation
+    from an active incident to its referenced operational resources.
+    """
+    service = IncidentPropagationService(session)
+    cid = _extract_cid(request)
+    actor_id = _extract_actor(request)
+    summary = service.propagate_incident_impact(
+        incident_id=incident_id,
+        correlation_id=cid,
+        actor_person_id=actor_id,
+    )
+    return create_success_response(
+        data=summary.model_dump(),
+        correlation_id=str(cid) if cid else request.headers.get("X-Request-ID"),
+    )
+
+
+@router.get("/{incident_id}/propagation", response_model=ApiResponse)
+def list_incident_propagations(
+    request: Request,
+    incident_id: uuid.UUID,
+    session: Session = Depends(get_db),
+):
+    """Retrieves historical propagation attempts and outcomes for an incident."""
+    service = IncidentPropagationService(session)
+    records = service.list_propagations(incident_id)
+    data = [r.model_dump() for r in records]
+    return create_success_response(
+        data=data,
+        correlation_id=request.headers.get("X-Request-ID"),
+    )
+

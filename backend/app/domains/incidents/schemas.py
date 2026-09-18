@@ -8,6 +8,8 @@ from backend.app.domains.incidents.states import (
     IncidentStatus,
     IncidentSeverity,
     IncidentReferenceType,
+    PropagationStatus,
+    PropagationAction,
 )
 from backend.app.shared.types.provenance import DataProvenance
 
@@ -126,3 +128,54 @@ class IncidentTimelineRead(BaseModel):
     current_status: IncidentStatus
     entries: List[IncidentTimelineEntry]
     total_entries: int
+
+
+# ============================================================
+# 4. INCIDENT PROPAGATION SCHEMAS
+# ============================================================
+
+class PropagationResult(BaseModel):
+    """Deterministic result of an operational impact propagation attempt on a referenced entity."""
+    reference_id: uuid.UUID = Field(description="UUID of the referenced operational resource")
+    reference_type: str = Field(description="Operational resource type e.g. LOCATION, ASSET")
+    action: str = Field(description="Authoritative action attempted")
+    status: PropagationStatus = Field(description="Outcome status of propagation")
+    previous_state: Optional[str] = Field(default=None, description="State before propagation if state transition occurred")
+    resulting_state: Optional[str] = Field(default=None, description="State after propagation")
+    reason: Optional[str] = Field(default=None, description="Deterministic justification for outcome")
+    event_id: Optional[uuid.UUID] = Field(default=None, description="UUID of emitted operational event if applied")
+    audit_id: Optional[uuid.UUID] = Field(default=None, description="UUID of recorded audit log entry if applied")
+    operational_metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata captured during propagation")
+    created_at: Optional[datetime] = Field(default=None, description="Timestamp of propagation")
+
+
+class IncidentPropagationSummary(BaseModel):
+    """Aggregated batch summary of incident cross-domain operational impact propagation."""
+    incident_id: uuid.UUID
+    incident_code: str
+    total_references: int
+    applied_count: int
+    skipped_count: int
+    rejected_count: int
+    requires_action_count: int
+    results: List[PropagationResult]
+
+
+class IncidentPropagationRead(BaseModel):
+    """Read schema for historical incident propagation record."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    incident_id: uuid.UUID
+    reference_id: uuid.UUID
+    reference_type: str
+    action: str
+    status: PropagationStatus
+    previous_state: Optional[str] = None
+    resulting_state: Optional[str] = None
+    reason: Optional[str] = None
+    event_id: Optional[uuid.UUID] = None
+    audit_id: Optional[uuid.UUID] = None
+    operational_metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
