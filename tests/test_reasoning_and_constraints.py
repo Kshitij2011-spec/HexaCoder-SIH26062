@@ -293,7 +293,20 @@ def test_bounded_traversal_depth(db_session):
         ))
     db_session.commit()
 
-    # Traversal with depth=2
+    # Verify class constants conform strictly to contract
+    assert DependencyService.DEFAULT_TRAVERSAL_DEPTH == 3
+    assert DependencyService.MAX_TRAVERSAL_DEPTH == 5
+
+    # Traversal without max_depth argument must use DEFAULT_TRAVERSAL_DEPTH = 3
+    res_default = dep_service.traverse_graph("ASSET", nodes[0])
+    assert res_default.depth_limit == 3
+    default_terminals = [p.terminal_entity_id for p in res_default.paths]
+    assert nodes[1] in default_terminals
+    assert nodes[2] in default_terminals
+    assert nodes[3] in default_terminals
+    assert nodes[4] not in default_terminals  # Depth 4 excluded under default=3
+
+    # Traversal requesting explicit depth=2
     res2 = dep_service.traverse_graph("ASSET", nodes[0], max_depth=2)
     assert res2.depth_limit == 2
     terminal_ids = [p.terminal_entity_id for p in res2.paths]
@@ -306,7 +319,7 @@ def test_bounded_traversal_depth(db_session):
     assert res_clamped.depth_limit == 5
     clamped_terminals = [p.terminal_entity_id for p in res_clamped.paths]
     assert nodes[5] in clamped_terminals
-    assert nodes[6] not in clamped_terminals  # Depth 6 must be excluded
+    assert nodes[6] not in clamped_terminals  # Depth 6 must be excluded under max=5
 
 
 def test_cycle_safety_termination(db_session):

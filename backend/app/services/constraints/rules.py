@@ -5,7 +5,7 @@ No dynamic code execution or arbitrary expression evaluation.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict, Any, Callable
 from sqlalchemy.orm import Session
 from sqlalchemy import select, text
@@ -269,7 +269,7 @@ def evaluate_mission_resource_required(
             evidence={"unmet": unmet_resources}
         )
 
-    if unevaluable_resources and not deps:
+    if unevaluable_resources:
         return ConstraintEvaluationResult(
             constraint_id=constraint.id,
             code=constraint.code,
@@ -838,7 +838,7 @@ def evaluate_location_access(
             TimeWindowModel.subject_type == "LOCATION",
             TimeWindowModel.subject_id == loc_id
         )
-    ).scalar_one_or_none()
+    ).scalars().first()
 
     if not tw:
         return ConstraintEvaluationResult(
