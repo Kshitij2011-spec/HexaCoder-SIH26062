@@ -84,8 +84,6 @@ class SyncService:
         op = OfflineOperationModel(
             id=uuid.uuid4(),
             operation_id=data.operation_id,
-            entity_type=data.entity_type.upper(),
-            operation_type=data.operation_type.upper(),
             entity_type=entity_type,
             operation_type=op_type,
             payload=data.payload,
