@@ -130,3 +130,39 @@ class AssignmentStatus(str, Enum):
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
 
+
+class InventoryStatus(str, Enum):
+    """Lifecycle and availability status of inventory stock lots."""
+    ON_ORDER = "ON_ORDER"
+    INBOUND = "INBOUND"
+    AVAILABLE = "AVAILABLE"
+    RESERVED = "RESERVED"
+    ISSUED = "ISSUED"
+    CONSUMED = "CONSUMED"
+    TRANSFERRED = "TRANSFERRED"
+    QUARANTINED = "QUARANTINED"
+    DISPOSED = "DISPOSED"
+
+
+class InventoryTransactionType(str, Enum):
+    """Types of operational stock ledger movements."""
+    RECEIPT = "RECEIPT"
+    RESERVATION = "RESERVATION"
+    RELEASE = "RELEASE"
+    ISSUE = "ISSUE"
+    TRANSFER_OUT = "TRANSFER_OUT"
+    TRANSFER_IN = "TRANSFER_IN"
+    DAMAGE = "DAMAGE"
+    QUARANTINE = "QUARANTINE"
+    DISPOSE = "DISPOSE"
+    RETURN = "RETURN"
+
+
+class ItemCriticality(str, Enum):
+    """Operational criticality classification for inventory catalog items."""
+    STANDARD = "STANDARD"
+    MISSION_CRITICAL = "MISSION_CRITICAL"
+    LIFE_SUPPORT = "LIFE_SUPPORT"
+    SAFETY = "SAFETY"
+
+

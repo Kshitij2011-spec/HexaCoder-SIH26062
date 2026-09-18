@@ -33,6 +33,12 @@ import backend.app.platform.events.models
 import backend.app.platform.audit.models
 import backend.app.services.dependencies.models
 import backend.app.services.constraints.models
+# B2/B3/B4 domain models — must be imported so SQLite creates their tables
+import backend.app.domains.transport.models
+import backend.app.domains.cargo.models
+import backend.app.domains.assets.models
+import backend.app.domains.inventory.models
+import backend.app.domains.incidents.models
 
 from backend.app.services.dependencies.models import DependencyModel
 from backend.app.services.dependencies.service import DependencyService
@@ -48,6 +54,9 @@ from backend.app.domains.teams.models import TeamModel
 from backend.app.domains.people.models import PersonModel
 from backend.app.domains.time_windows.models import TimeWindowModel
 from backend.app.platform.events.models import OperationalEventModel
+from backend.app.domains.assets.models import AssetModel
+from backend.app.domains.transport.models import TransportLegModel
+from backend.app.domains.cargo.models import CargoConsignmentModel, CargoPackageModel
 from backend.app.shared.types.reasoning import (
     DependencyRelationship,
     ConstraintSeverity,
@@ -549,10 +558,8 @@ def test_mission_readiness_baseline_ready(db_session):
     db_session.add(TeamModel(id=t_id, code=f"T-B-{uuid.uuid4().hex[:6]}", name="Base Team", expedition_id=exp_id))
     db_session.add(PersonModel(id=uuid.uuid4(), person_code=f"P-B-{uuid.uuid4().hex[:4]}", full_name="Explorer 1", role="LEAD", expedition_id=exp_id, team_id=t_id, readiness_state="READY"))
 
-    # Asset in mock table
-    with db_session.bind.begin() as conn:
-        conn.execute(text("INSERT INTO assets (id, asset_code, name, type, status) VALUES (:id, :code, :name, 'ROVER', 'AVAILABLE')"),
-                     {"id": str(a_id), "code": f"ROV-{uuid.uuid4().hex[:6]}", "name": "Polar Rover"})
+    # Asset via ORM (respects Python-level defaults for condition, criticality, operational_metadata, etc.)
+    db_session.add(AssetModel(id=a_id, asset_code=f"ROV-{uuid.uuid4().hex[:6]}", name="Polar Rover", type="ROVER", status="AVAILABLE"))
 
     # Dependencies: M-BASE REQUIRES T-BASE, M-BASE REQUIRES ROVER
     db_session.add(DependencyModel(id=uuid.uuid4(), relationship_type="REQUIRES", source_entity_type="MISSION", source_entity_id=m_id, target_entity_type="TEAM", target_entity_id=t_id))
@@ -587,9 +594,8 @@ def test_mission_readiness_blocked_by_unavailable_asset(db_session):
     db_session.add(ExpeditionModel(id=exp_id, code=f"EXP-FAIL-{uuid.uuid4().hex[:6]}", name="Fail Exp", season="2026-2027"))
     db_session.add(MissionModel(id=m_id, expedition_id=exp_id, code=f"M-AFAIL-{uuid.uuid4().hex[:6]}", title="Failed Asset Mission", type="SURVEY", status="APPROVED"))
 
-    with db_session.bind.begin() as conn:
-        conn.execute(text("INSERT INTO assets (id, asset_code, name, type, status) VALUES (:id, :code, :name, 'RADAR', 'DAMAGED')"),
-                     {"id": str(a_id), "code": f"RADAR-{uuid.uuid4().hex[:6]}", "name": "Broken Radar"})
+    # Asset via ORM (respects Python-level defaults)
+    db_session.add(AssetModel(id=a_id, asset_code=f"RADAR-{uuid.uuid4().hex[:6]}", name="Broken Radar", type="RADAR", condition="DEGRADED", status="DAMAGED"))
 
     db_session.add(DependencyModel(id=uuid.uuid4(), relationship_type="REQUIRES", source_entity_type="MISSION", source_entity_id=m_id, target_entity_type="ASSET", target_entity_id=a_id))
     db_session.commit()
@@ -762,8 +768,7 @@ def test_mission_readiness_m08_seeded_baseline(db_session):
         db_session.add(PersonModel(id=uuid.uuid4(), person_code="P-101", full_name="Survey Lead", role="LEAD", expedition_id=exp_id, team_id=r04_team_id, readiness_state="READY"))
 
     db_session.execute(text("DELETE FROM assets WHERE id = :id OR asset_code = 'I-42'"), {"id": str(i42_asset_id)})
-    db_session.execute(text("INSERT INTO assets (id, asset_code, name, type, status) VALUES (:id, 'I-42', 'Cryo-Seismic Profiler', 'INSTRUMENT', 'AVAILABLE')"),
-                 {"id": str(i42_asset_id)})
+    db_session.add(AssetModel(id=i42_asset_id, asset_code="I-42", name="Cryo-Seismic Profiler", type="INSTRUMENT", criticality="CRITICAL", status="AVAILABLE"))
 
     tw = db_session.get(TimeWindowModel, tw_id)
     if not tw:
@@ -876,15 +881,19 @@ def test_hero_transport_delay_impact_propagation(db_session):
     db_session.execute(text("DELETE FROM cargo_consignments WHERE id = :id OR code = 'C-117'"), {"id": str(c117_id)})
     db_session.execute(text("DELETE FROM cargo_packages WHERE id = :id OR code = 'PKG-117-01'"), {"id": str(pkg_id)})
     db_session.execute(text("DELETE FROM assets WHERE id = :id OR asset_code = 'I-42'"), {"id": str(i42_id)})
-
-    db_session.execute(text("INSERT INTO transport_legs (id, code, mode, status) VALUES (:id, 'T-08', 'VESSEL', 'DELAYED')"),
-                 {"id": str(t08_id)})
-    db_session.execute(text("INSERT INTO cargo_consignments (id, code, expedition_id, required_by_at, status) VALUES (:id, 'C-117', :eid, CURRENT_TIMESTAMP, 'DELAYED')"),
-                 {"id": str(c117_id), "eid": str(exp_id)})
-    db_session.execute(text("INSERT INTO cargo_packages (id, code, consignment_id, description, status) VALUES (:id, 'PKG-117-01', :cid, 'Seismic sensor kit', 'PACKED')"),
-                 {"id": str(pkg_id), "cid": str(c117_id)})
-    db_session.execute(text("INSERT INTO assets (id, asset_code, name, type, status) VALUES (:id, 'I-42', 'Cryo-Seismic Profiler', 'INSTRUMENT', 'AVAILABLE')"),
-                 {"id": str(i42_id)})
+    _sentinel_loc = uuid.UUID("00000000-0000-0000-0000-000000000000")
+    db_session.add(TransportLegModel(
+        id=t08_id, code="T-08", expedition_id=exp_id,
+        mode="VESSEL", origin_location_id=_sentinel_loc,
+        destination_location_id=_sentinel_loc, status="DELAYED"
+    ))
+    db_session.add(CargoConsignmentModel(
+        id=c117_id, code="C-117", expedition_id=exp_id,
+        origin_location_id=_sentinel_loc, destination_location_id=_sentinel_loc,
+        required_by_at=datetime.now(timezone.utc), status="DELAYED"
+    ))
+    db_session.add(CargoPackageModel(id=pkg_id, code="PKG-117-01", consignment_id=c117_id))
+    db_session.add(AssetModel(id=i42_id, asset_code="I-42", name="Cryo-Seismic Profiler", type="INSTRUMENT", criticality="CRITICAL", status="AVAILABLE"))
 
     # Delete existing hero dependency IDs if present from previous test
     hero_dep_ids = [
