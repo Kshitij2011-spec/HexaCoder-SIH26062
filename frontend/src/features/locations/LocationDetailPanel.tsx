@@ -7,6 +7,7 @@ import { LocationStateActions } from './LocationStateActions';
 import { LocationHierarchyTree } from './LocationHierarchyTree';
 import { EntityCode } from '../../components/shared/EntityCode';
 import { ProvenanceTag } from '../../components/shared/ProvenanceTag';
+import { OperationalTimeline } from '../../components/shared/OperationalTimeline';
 import type { Location } from '../../lib/types/api';
 
 interface Props {
@@ -104,6 +105,16 @@ export function LocationDetailPanel({ locationId, onClose, onNavigate }: Props) 
                 Operational Actions
               </h3>
               <LocationStateActions location={location} />
+            </section>
+
+            {/* Operational Timeline */}
+            <section aria-label="Operational timeline" className="pt-4 border-t border-slate-800">
+              <OperationalTimeline
+                entityType="LOCATION"
+                entityId={location.id}
+                title="Location Operational History"
+                defaultIncludeRelated={true}
+              />
             </section>
           </>
         )}

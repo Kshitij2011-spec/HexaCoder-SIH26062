@@ -6,6 +6,7 @@ import { IncidentSeverityBadge } from './IncidentSeverityBadge';
 import { IncidentStatusActions } from './IncidentStatusActions';
 import { IncidentReferences } from './IncidentReferences';
 import { IncidentTimeline } from './IncidentTimeline';
+import { OperationalTimeline } from '../../components/shared/OperationalTimeline';
 import { useIncidentTimeline } from './hooks/useIncidentTimeline';
 import { useIncidentReferences } from './hooks/useIncidentReferences';
 import type { Incident } from '../../lib/types/api';
@@ -162,7 +163,7 @@ export function IncidentDetailPanel({ incident, onClose, onRefreshIncident }: Pr
         </section>
 
         {/* Operational Timeline Section */}
-        <section className="space-y-3 pt-4 border-t border-slate-800">
+        <section className="space-y-4 pt-4 border-t border-slate-800">
           <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
             <Clock className="w-4 h-4 text-rose-400" aria-hidden="true" />
             Incident Journal & Event History
@@ -170,6 +171,12 @@ export function IncidentDetailPanel({ incident, onClose, onRefreshIncident }: Pr
           <IncidentTimeline
             entries={timelineData?.history ?? []}
             isLoading={isTimelineLoading}
+          />
+          <OperationalTimeline
+            entityType="INCIDENT"
+            entityId={incident.id}
+            title="Cross-Domain Incident Propagation & Event History"
+            defaultIncludeRelated={true}
           />
         </section>
       </div>
