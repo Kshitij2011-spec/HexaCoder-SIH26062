@@ -121,7 +121,7 @@ class ExpeditionReadinessService:
             if exp_viol:
                 reasons.append(f"Expedition hard constraints violated: {'; '.join(exp_viol)}")
             explanation = f"Expedition {expedition.code} is BLOCKED because: {'; '.join(reasons)}."
-        elif at_risk_count > 0 or any(w.type == "EXPEDITION_CONSTRAINT" for w in warnings):
+        elif at_risk_count > 0 or any(w.type == "EXPEDITION_CONSTRAINT" for w in warnings) or len(unknowns) > 0:
             overall_state = ReadinessState.AT_RISK
             reasons = []
             if at_risk_count > 0:
@@ -130,6 +130,8 @@ class ExpeditionReadinessService:
             exp_warns = [w.reason for w in warnings if w.type == "EXPEDITION_CONSTRAINT"]
             if exp_warns:
                 reasons.append(f"Expedition soft warnings: {'; '.join(exp_warns)}")
+            if unknowns:
+                reasons.append(f"{len(unknowns)} required constraint(s) unevaluable pending Track B data")
             explanation = f"Expedition {expedition.code} is AT_RISK because: {'; '.join(reasons)}."
         else:
             overall_state = ReadinessState.READY

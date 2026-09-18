@@ -68,12 +68,13 @@ The **Reasoning & Impact Engine** establishes the foundational operational intel
 ### 2.4 MissionReadinessService & ExpeditionReadinessService
 - **Location**: `backend/app/services/readiness/`
 - **Outcomes**: `READY`, `AT_RISK`, `BLOCKED`.
-- **Invariants**:
-  - No synthetic percentage readiness scores.
-  - Hard constraint violations produce `BLOCKED`.
-  - Soft warnings or unserviced risks produce `AT_RISK`.
-  - Zero blockers or warnings produce `READY`.
-  - Unknown requirements (`PENDING_TRACK_B`) are surfaced explicitly; they do NOT silently default to satisfied.
+- **Deterministic Aggregation Rules**:
+  - **BLOCKED**: Triggered by any hard constraint violation, disbanded team, or explicitly unserviceable/unavailable critical resource.
+  - **AT_RISK**: Triggered by any soft constraint breach, personnel shortfall warnings, OR any required dependency/constraint that is `NOT_EVALUABLE` / `UNKNOWN` pending Track B data.
+  - **READY**: Only achieved when all required personnel, assets, windows, and constraints are fully evaluated and satisfied with zero blockers, zero warnings, and zero unknowns.
+  - **UNKNOWN Guard**: An unevaluable or missing dependency (`NOT_EVALUABLE` / `UNKNOWN`) can NEVER cause a mission or expedition to be reported as `READY`.
+  - **Zero Fake Scores**: Prohibits synthetic percentage scores (no arbitrary "87% mission readiness").
+  - **Zero Side-Effects**: Readiness evaluation is purely derived and never mutates authoritative primary table statuses.
 
 ### 2.5 OperationalImpactProcessor
 - **Location**: `backend/app/services/impact/processor.py`

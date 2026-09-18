@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, select
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker, Session
 
@@ -587,6 +587,215 @@ def test_mission_readiness_blocked_by_unavailable_asset(db_session):
     assert any(b.type == "ASSET" for b in result.blockers)
 
 
+def test_mission_readiness_blocked_by_hard_constraint(db_session):
+    """Verifies that a hard constraint violation deterministically blocks mission readiness."""
+    readiness_service = MissionReadinessService(db_session)
+
+    exp_id = uuid.uuid4()
+    m_id = uuid.uuid4()
+    db_session.add(ExpeditionModel(id=exp_id, code=f"EXP-HC-{uuid.uuid4().hex[:6]}", name="HC Exp", season="2026-2027"))
+    db_session.add(MissionModel(
+        id=m_id,
+        expedition_id=exp_id,
+        code=f"M-HC-{uuid.uuid4().hex[:6]}",
+        title="Hard Constraint Mission",
+        type="SCIENCE",
+        required_by_at=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        status="APPROVED"
+    ))
+    # Time window closing past deadline -> VIOLATES MISSION_REQUIRED_BY
+    db_session.add(TimeWindowModel(
+        id=uuid.uuid4(),
+        type="FIELD_DEPLOYMENT",
+        open_at=datetime(2026, 11, 20, tzinfo=timezone.utc),
+        close_at=datetime(2026, 12, 10, tzinfo=timezone.utc),
+        subject_type="MISSION",
+        subject_id=m_id,
+        status="OPEN"
+    ))
+    # Hard constraint
+    db_session.add(ConstraintModel(
+        id=uuid.uuid4(),
+        code=f"CONST-HARD-{uuid.uuid4().hex[:6]}",
+        name="Hard Deadline Rule",
+        type="SCHEDULE",
+        rule_code="MISSION_REQUIRED_BY",
+        subject_type="MISSION",
+        subject_id=m_id,
+        hard_or_soft="HARD"
+    ))
+    db_session.commit()
+
+    result = readiness_service.evaluate(m_id)
+    assert result.state == ReadinessState.BLOCKED
+    assert len(result.blockers) > 0
+    assert any("Hard constraint" in b.reason for b in result.blockers)
+
+
+def test_mission_readiness_at_risk_by_soft_constraint(db_session):
+    """Verifies that a soft constraint violation sets mission readiness to AT_RISK, not BLOCKED."""
+    readiness_service = MissionReadinessService(db_session)
+
+    exp_id = uuid.uuid4()
+    m_id = uuid.uuid4()
+    db_session.add(ExpeditionModel(id=exp_id, code=f"EXP-SC-{uuid.uuid4().hex[:6]}", name="SC Exp", season="2026-2027"))
+    db_session.add(MissionModel(
+        id=m_id,
+        expedition_id=exp_id,
+        code=f"M-SC-{uuid.uuid4().hex[:6]}",
+        title="Soft Constraint Mission",
+        type="SCIENCE",
+        required_by_at=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        status="APPROVED"
+    ))
+    # Time window closing past deadline
+    db_session.add(TimeWindowModel(
+        id=uuid.uuid4(),
+        type="FIELD_DEPLOYMENT",
+        open_at=datetime(2026, 11, 20, tzinfo=timezone.utc),
+        close_at=datetime(2026, 12, 10, tzinfo=timezone.utc),
+        subject_type="MISSION",
+        subject_id=m_id,
+        status="OPEN"
+    ))
+    # Soft constraint
+    db_session.add(ConstraintModel(
+        id=uuid.uuid4(),
+        code=f"CONST-SOFT-{uuid.uuid4().hex[:6]}",
+        name="Soft Target Date Advisory",
+        type="SCHEDULE",
+        rule_code="MISSION_REQUIRED_BY",
+        subject_type="MISSION",
+        subject_id=m_id,
+        hard_or_soft="SOFT"
+    ))
+    db_session.commit()
+
+    result = readiness_service.evaluate(m_id)
+    assert result.state == ReadinessState.AT_RISK
+    assert len(result.blockers) == 0
+    assert len(result.warnings) > 0
+    assert any("Soft constraint" in w.reason for w in result.warnings)
+
+
+def test_mission_readiness_unknown_dependency_prevents_ready(db_session):
+    """
+    CRITICAL INVARIANT: A mission requiring an asset or dependency that is NOT_EVALUABLE / UNKNOWN
+    (e.g., Track B asset record not yet present or constraint unevaluable)
+    must NEVER be reported as READY. It must evaluate to AT_RISK with unknown_requirements populated.
+    """
+    readiness_service = MissionReadinessService(db_session)
+
+    exp_id = uuid.uuid4()
+    m_id = uuid.uuid4()
+    missing_asset_id = uuid.uuid4()
+
+    db_session.add(ExpeditionModel(id=exp_id, code=f"EXP-UNK-{uuid.uuid4().hex[:6]}", name="Unknown Exp", season="2026-2027"))
+    db_session.add(MissionModel(
+        id=m_id,
+        expedition_id=exp_id,
+        code=f"M-UNK-{uuid.uuid4().hex[:6]}",
+        title="Unknown Dependency Mission",
+        type="SCIENCE",
+        status="APPROVED"
+    ))
+
+    # Mission REQUIRES an asset that does NOT exist in the assets table (Track B pending)
+    db_session.add(DependencyModel(
+        id=uuid.uuid4(),
+        relationship_type="REQUIRES",
+        source_entity_type="MISSION",
+        source_entity_id=m_id,
+        target_entity_type="ASSET",
+        target_entity_id=missing_asset_id
+    ))
+    db_session.commit()
+
+    result = readiness_service.evaluate(m_id)
+
+    # Must NOT be READY!
+    assert result.state != ReadinessState.READY
+    assert result.state == ReadinessState.AT_RISK
+    assert len(result.unknown_requirements) > 0
+    assert any(u.category == "ASSET" for u in result.unknown_requirements)
+
+
+def test_mission_readiness_m08_seeded_baseline(db_session):
+    """
+    Verifies that the canonical hero mission M-08 seeded baseline
+    evaluates deterministically to READY using actual domain relationships.
+    """
+    readiness_service = MissionReadinessService(db_session)
+
+    m08_id = uuid.UUID("20000000-0000-0000-0000-000000000001")
+    exp_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    r04_team_id = uuid.UUID("30000000-0000-0000-0000-000000000001")
+    i42_asset_id = uuid.UUID("90000000-0000-0000-0000-000000000001")
+    tw_id = uuid.UUID("d0000000-0000-0000-0000-000000000001")
+
+    # Seed M-08 and its related hero entities (idempotent get-or-create)
+    exp = db_session.get(ExpeditionModel, exp_id)
+    if not exp:
+        db_session.add(ExpeditionModel(id=exp_id, code="EXP-26-A", name="45th Indian Antarctic Expedition", season="2026-2027"))
+    mission = db_session.get(MissionModel, m08_id)
+    if not mission:
+        db_session.add(MissionModel(id=m08_id, expedition_id=exp_id, code="M-08", title="Coastal Geophysics Survey", type="SCIENTIFIC", status="READY"))
+    team = db_session.get(TeamModel, r04_team_id)
+    if not team:
+        db_session.add(TeamModel(id=r04_team_id, code="R-04", name="Field Survey Team", expedition_id=exp_id))
+
+    person = db_session.execute(select(PersonModel).where(PersonModel.team_id == r04_team_id)).scalars().first()
+    if not person:
+        db_session.add(PersonModel(id=uuid.uuid4(), person_code="P-101", full_name="Survey Lead", role="LEAD", expedition_id=exp_id, team_id=r04_team_id, readiness_state="READY"))
+
+    db_session.execute(text("DELETE FROM assets WHERE id = :id OR asset_code = 'I-42'"), {"id": str(i42_asset_id)})
+    db_session.execute(text("INSERT INTO assets (id, asset_code, name, type, status) VALUES (:id, 'I-42', 'Cryo-Seismic Profiler', 'INSTRUMENT', 'AVAILABLE')"),
+                 {"id": str(i42_asset_id)})
+
+    tw = db_session.get(TimeWindowModel, tw_id)
+    if not tw:
+        db_session.add(TimeWindowModel(
+            id=tw_id,
+            type="MISSION_WINDOW",
+            open_at=datetime(2026, 12, 20, 0, 0, tzinfo=timezone.utc),
+            close_at=datetime(2027, 1, 10, 0, 0, tzinfo=timezone.utc),
+            subject_type="MISSION",
+            subject_id=m08_id,
+            status="OPEN"
+        ))
+
+    # Dependencies: M-08 REQUIRES I-42, M-08 REQUIRES R-04
+    for did in ("d1000000-0000-0000-0000-000000000001", "d1000000-0000-0000-0000-000000000002"):
+        existing_dep = db_session.get(DependencyModel, uuid.UUID(did))
+        if existing_dep:
+            db_session.delete(existing_dep)
+    db_session.flush()
+
+    db_session.add(DependencyModel(
+        id=uuid.UUID("d1000000-0000-0000-0000-000000000001"),
+        relationship_type="REQUIRES",
+        source_entity_type="MISSION",
+        source_entity_id=m08_id,
+        target_entity_type="ASSET",
+        target_entity_id=i42_asset_id
+    ))
+    db_session.add(DependencyModel(
+        id=uuid.UUID("d1000000-0000-0000-0000-000000000002"),
+        relationship_type="REQUIRES",
+        source_entity_type="MISSION",
+        source_entity_id=m08_id,
+        target_entity_type="TEAM",
+        target_entity_id=r04_team_id
+    ))
+    db_session.commit()
+
+    result = readiness_service.evaluate(m08_id)
+    assert result.state == ReadinessState.READY
+    assert len(result.blockers) == 0
+    assert len(result.warnings) == 0
+    assert len(result.unknown_requirements) == 0
+
+
 def test_expedition_readiness_aggregation(db_session):
     """Verifies campaign-wide expedition readiness rollup from individual missions."""
     exp_service = ExpeditionReadinessService(db_session)
@@ -642,10 +851,19 @@ def test_hero_transport_delay_impact_propagation(db_session):
     pkg_id = uuid.UUID("70000000-0000-0000-0000-000000000001")
     i42_id = uuid.UUID("90000000-0000-0000-0000-000000000001")
 
-    db_session.add(ExpeditionModel(id=exp_id, code="EXP-26-A", name="45th Indian Antarctic Expedition", season="2026-2027"))
-    db_session.add(MissionModel(id=m08_id, expedition_id=exp_id, code="M-08", title="Coastal Geophysics Survey", type="SCIENTIFIC", status="APPROVED"))
+    exp = db_session.get(ExpeditionModel, exp_id)
+    if not exp:
+        db_session.add(ExpeditionModel(id=exp_id, code="EXP-26-A", name="45th Indian Antarctic Expedition", season="2026-2027"))
+    mission = db_session.get(MissionModel, m08_id)
+    if not mission:
+        db_session.add(MissionModel(id=m08_id, expedition_id=exp_id, code="M-08", title="Coastal Geophysics Survey", type="SCIENTIFIC", status="APPROVED"))
 
     # Register in mock tables for code lookups matching canonical seed records
+    db_session.execute(text("DELETE FROM transport_legs WHERE id = :id OR code = 'T-08'"), {"id": str(t08_id)})
+    db_session.execute(text("DELETE FROM cargo_consignments WHERE id = :id OR code = 'C-117'"), {"id": str(c117_id)})
+    db_session.execute(text("DELETE FROM cargo_packages WHERE id = :id OR code = 'PKG-117-01'"), {"id": str(pkg_id)})
+    db_session.execute(text("DELETE FROM assets WHERE id = :id OR asset_code = 'I-42'"), {"id": str(i42_id)})
+
     db_session.execute(text("INSERT INTO transport_legs (id, code, mode, status) VALUES (:id, 'T-08', 'VESSEL', 'DELAYED')"),
                  {"id": str(t08_id)})
     db_session.execute(text("INSERT INTO cargo_consignments (id, code, expedition_id, required_by_at, status) VALUES (:id, 'C-117', :eid, CURRENT_TIMESTAMP, 'DELAYED')"),
@@ -654,6 +872,21 @@ def test_hero_transport_delay_impact_propagation(db_session):
                  {"id": str(pkg_id), "cid": str(c117_id)})
     db_session.execute(text("INSERT INTO assets (id, asset_code, name, type, status) VALUES (:id, 'I-42', 'Cryo-Seismic Profiler', 'INSTRUMENT', 'AVAILABLE')"),
                  {"id": str(i42_id)})
+
+    # Delete existing hero dependency IDs if present from previous test
+    hero_dep_ids = [
+        "d1000000-0000-0000-0000-000000000001",
+        "d1000000-0000-0000-0000-000000000002",
+        "d1000000-0000-0000-0000-000000000003",
+        "d1000000-0000-0000-0000-000000000004",
+        "d1000000-0000-0000-0000-000000000014",
+        "d1000000-0000-0000-0000-000000000015",
+    ]
+    for did in hero_dep_ids:
+        existing_dep = db_session.get(DependencyModel, uuid.UUID(did))
+        if existing_dep:
+            db_session.delete(existing_dep)
+    db_session.flush()
 
     # Connect canonical chain from seed.sql:
     # 1. C-117 MOVES_VIA T-08 (seed d1000000-0000-0000-0000-000000000004)

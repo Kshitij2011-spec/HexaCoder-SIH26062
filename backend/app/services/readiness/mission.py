@@ -108,9 +108,15 @@ class MissionReadinessService:
                 )
 
         # 5. Synthesize Operational Readiness State
+        # Hard blockers take precedence -> BLOCKED
+        # Soft warnings -> AT_RISK
+        # Unevaluable / missing evidence -> AT_RISK (never reported as READY)
+        # Only fully satisfied requirements with zero unknowns -> READY
         if blockers:
             overall_state = ReadinessState.BLOCKED
         elif warnings:
+            overall_state = ReadinessState.AT_RISK
+        elif unknowns:
             overall_state = ReadinessState.AT_RISK
         else:
             overall_state = ReadinessState.READY
