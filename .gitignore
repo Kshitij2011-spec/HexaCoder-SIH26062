@@ -51,6 +51,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+.playwright-mcp/
 
 # IDE / Operating System
 .vscode/

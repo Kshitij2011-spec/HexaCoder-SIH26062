@@ -521,3 +521,35 @@ class TestBackwardCompatibility:
     def test_sync_endpoint_present(self, client):
         r = client.get("/api/v1/sync")
         assert r.status_code == 200
+
+
+class TestSemanticBoundaryAndSecurity:
+    """Tests enforcing semantic boundaries and preventing arbitrary code/SQL execution."""
+
+    def test_unrecognized_entity_type_rejected(self, client):
+        body = _make_enqueue_payload(entity_type="ARBITRARY_UNKNOWN_ENTITY")
+        r = client.post("/api/v1/sync", json=body)
+        assert r.status_code == 422
+
+    def test_unrecognized_operation_type_rejected(self, client):
+        body = _make_enqueue_payload(operation_type="DROP_TABLE")
+        r = client.post("/api/v1/sync", json=body)
+        assert r.status_code == 422
+
+    def test_forbidden_payload_keys_rejected(self, client):
+        body = _make_enqueue_payload()
+        body["payload"] = {"sql": "DROP TABLE assets;", "data": 123}
+        r = client.post("/api/v1/sync", json=body)
+        assert r.status_code == 422
+
+    def test_command_payload_key_rejected(self, client):
+        body = _make_enqueue_payload()
+        body["payload"] = {"command": "rm -rf /", "data": 123}
+        r = client.post("/api/v1/sync", json=body)
+        assert r.status_code == 422
+
+    def test_valid_operation_passes_boundary(self, client):
+        body = _make_enqueue_payload(entity_type="ASSET", operation_type="STATE_TRANSITION")
+        r = client.post("/api/v1/sync", json=body)
+        assert r.status_code == 201
+

@@ -9,6 +9,13 @@ from backend.app.shared.types.states import (
     TeamStatus,
     HardSoftConstraint,
 )
+from backend.app.shared.types.reasoning import (
+    DependencyRelationship,
+    ConstraintSeverity,
+    ConstraintState,
+    ReadinessState,
+    TraversalDirection,
+)
 
 __all__ = [
     "DataProvenance",
@@ -18,4 +25,9 @@ __all__ = [
     "PersonMovement",
     "TeamStatus",
     "HardSoftConstraint",
+    "DependencyRelationship",
+    "ConstraintSeverity",
+    "ConstraintState",
+    "ReadinessState",
+    "TraversalDirection",
 ]
