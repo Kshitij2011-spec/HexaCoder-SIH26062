@@ -12,6 +12,8 @@ from backend.app.domains.sync.states import (
     OfflineOperationStatus,
     TERMINAL_STATUSES,
     OFFLINE_OP_TRANSITIONS,
+    ALLOWED_ENTITY_TYPES,
+    OfflineOperationType,
 )
 from backend.app.domains.sync.schemas import (
     OfflineOperationEnqueue,
@@ -67,12 +69,23 @@ class SyncService:
         if existing:
             return existing, False  # idempotent — already queued
 
+        entity_type = data.entity_type.upper().strip()
+        if entity_type not in ALLOWED_ENTITY_TYPES:
+            raise DomainValidationError(
+                "OfflineOperation", "entity_type", f"Invalid entity_type '{data.entity_type}'. Allowed types: {sorted(ALLOWED_ENTITY_TYPES)}"
+            )
+        op_type = data.operation_type.upper().strip()
+        if op_type not in {t.value for t in OfflineOperationType}:
+            raise DomainValidationError(
+                "OfflineOperation", "operation_type", f"Invalid operation_type '{data.operation_type}'. Allowed types: {sorted({t.value for t in OfflineOperationType})}"
+            )
+
         queued_at = data.queued_at or datetime.now(timezone.utc)
         op = OfflineOperationModel(
             id=uuid.uuid4(),
             operation_id=data.operation_id,
-            entity_type=data.entity_type.upper(),
-            operation_type=data.operation_type.upper(),
+            entity_type=entity_type,
+            operation_type=op_type,
             payload=data.payload,
             status=OfflineOperationStatus.PENDING,
             queued_at=queued_at,

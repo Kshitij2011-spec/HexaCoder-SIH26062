@@ -433,4 +433,77 @@ def test_rls_security_migration_covers_all_core_tables():
         assert pattern in content, f"Table '{table}' missing RLS enablement in security baseline migration"
 
 
+def test_sqlite_uuid_compatibility_and_interoperability():
+    """
+    Focused Regression Test for SQLiteUUID TypeDecorator in backend.app.db.base:
+    Proves:
+    1. ORM UUID insert into SQLite stores canonical 36-character hyphenated UUID string.
+    2. Raw SQL lookup by canonical hyphenated UUID matches the row.
+    3. ORM lookup returns the exact same Python uuid.UUID object.
+    4. UUID comparisons work bidirectionally (ORM insert -> raw SQL lookup, raw SQL insert -> ORM lookup).
+    5. Production PostgreSQL dialect retains native UUID type (PG_UUID base is UUID(as_uuid=True)).
+    """
+    import uuid
+    from sqlalchemy import create_engine, text, Column, String
+    from sqlalchemy.pool import StaticPool
+    from sqlalchemy.orm import declarative_base, sessionmaker
+    from sqlalchemy.dialects.postgresql import UUID as PG_NATIVE_UUID
+    from backend.app.db.base import PG_UUID
+
+    # 1. Verify PostgreSQL native specification
+    assert isinstance(PG_UUID, PG_NATIVE_UUID)
+    assert PG_UUID.as_uuid is True
+
+    # 2. Test in SQLite environment
+    test_base = declarative_base()
+
+    class MockItem(test_base):
+        __tablename__ = "test_mock_items"
+        id = Column(PG_UUID, primary_key=True, default=uuid.uuid4)
+        name = Column(String(100), nullable=False)
+
+    engine = create_engine("sqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    test_base.metadata.create_all(engine)
+    TestingSession = sessionmaker(bind=engine)
+    session = TestingSession()
+
+    # Step 1: ORM insert
+    item_id = uuid.uuid4()
+    session.add(MockItem(id=item_id, name="Test Rover"))
+    session.commit()
+
+    # Step 2: Raw SQL lookup by canonical hyphenated UUID string
+    raw_row = session.execute(
+        text("SELECT id, typeof(id), length(id), name FROM test_mock_items WHERE id = :id"),
+        {"id": str(item_id)}
+    ).mappings().first()
+    assert raw_row is not None
+    assert raw_row["id"] == str(item_id)
+    assert raw_row["length(id)"] == 36
+    assert raw_row["name"] == "Test Rover"
+
+    # Step 3: ORM lookup returns exact uuid.UUID
+    orm_item = session.get(MockItem, item_id)
+    assert orm_item is not None
+    assert orm_item.id == item_id
+    assert isinstance(orm_item.id, uuid.UUID)
+
+    # Step 4: Raw SQL insert -> ORM lookup
+    raw_id = uuid.uuid4()
+    session.execute(
+        text("INSERT INTO test_mock_items (id, name) VALUES (:id, :name)"),
+        {"id": str(raw_id), "name": "Raw Sensor"}
+    )
+    session.commit()
+
+    orm_from_raw = session.get(MockItem, raw_id)
+    assert orm_from_raw is not None
+    assert orm_from_raw.id == raw_id
+    assert isinstance(orm_from_raw.id, uuid.UUID)
+    assert orm_from_raw.name == "Raw Sensor"
+
+    session.close()
+
+
+
 
