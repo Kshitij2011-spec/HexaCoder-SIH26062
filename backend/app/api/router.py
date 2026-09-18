@@ -14,6 +14,7 @@ from backend.app.domains.assets.router import router as assets_router
 from backend.app.domains.incidents.router import router as incidents_router
 from backend.app.domains.sync.router import router as sync_router
 from backend.app.domains.replanning.router import router as replanning_router
+from backend.app.domains.control_tower.router import router as control_tower_router
 from backend.app.platform.events.router import router as events_router
 from backend.app.services.router import router as reasoning_router
 from backend.app.db.session import get_db_health
@@ -59,6 +60,7 @@ api_v1_router.include_router(sync_router)
 api_v1_router.include_router(replanning_router)
 api_v1_router.include_router(events_router)
 api_v1_router.include_router(reasoning_router)
+api_v1_router.include_router(control_tower_router, prefix="/control-tower")
 
 __all__ = ["api_v1_router"]
 
