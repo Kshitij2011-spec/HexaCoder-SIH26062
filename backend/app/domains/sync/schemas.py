@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+from backend.app.domains.sync.states import ALLOWED_ENTITY_TYPES, OfflineOperationType
 
 
 class OfflineOperationEnqueue(BaseModel):
@@ -33,6 +35,34 @@ class OfflineOperationEnqueue(BaseModel):
         default=None,
         description="UUID of the person/user who queued this operation.",
     )
+
+    @field_validator("entity_type")
+    @classmethod
+    def validate_entity_type(cls, v: str) -> str:
+        v_upper = v.upper().strip()
+        if v_upper not in ALLOWED_ENTITY_TYPES:
+            raise ValueError(f"Invalid entity_type '{v}'. Allowed types: {sorted(ALLOWED_ENTITY_TYPES)}")
+        return v_upper
+
+    @field_validator("operation_type")
+    @classmethod
+    def validate_operation_type(cls, v: str) -> str:
+        v_upper = v.upper().strip()
+        allowed = {t.value for t in OfflineOperationType}
+        if v_upper not in allowed:
+            raise ValueError(f"Invalid operation_type '{v}'. Allowed types: {sorted(allowed)}")
+        return v_upper
+
+    @field_validator("payload")
+    @classmethod
+    def validate_payload(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(v, dict):
+            raise ValueError("Payload must be a dictionary.")
+        forbidden_keys = {"__code__", "sql", "raw_sql", "execute", "eval", "command"}
+        for k in v.keys():
+            if str(k).lower() in forbidden_keys:
+                raise ValueError(f"Forbidden payload key '{k}' rejected by sync security boundary.")
+        return v
 
 
 class OfflineOperationRead(BaseModel):
