@@ -124,12 +124,35 @@ class ControlTowerService:
 
         # 4. Critical Hard Constraints Violated
         # Evaluate active hard constraints
-        hard_constraints = self.session.execute(
-            select(ConstraintModel).where(
-                ConstraintModel.active.is_(True),
-                ConstraintModel.hard_or_soft == "HARD",
+        hc_stmt = select(ConstraintModel).where(
+            ConstraintModel.active.is_(True),
+            ConstraintModel.hard_or_soft == "HARD",
+        )
+        if expedition_id:
+            m_ids = list(
+                self.session.execute(
+                    select(MissionModel.id).where(MissionModel.expedition_id == expedition_id)
+                ).scalars().all()
             )
-        ).scalars().all()
+            t_ids = list(
+                self.session.execute(
+                    select(TransportLegModel.id).where(TransportLegModel.expedition_id == expedition_id)
+                ).scalars().all()
+            )
+            c_ids = list(
+                self.session.execute(
+                    select(CargoConsignmentModel.id).where(CargoConsignmentModel.expedition_id == expedition_id)
+                ).scalars().all()
+            )
+            target_ids = [expedition_id] + m_ids + t_ids + c_ids
+            hc_stmt = hc_stmt.where(
+                or_(
+                    ConstraintModel.subject_id.in_(target_ids),
+                    ConstraintModel.subject_id.is_(None),
+                )
+            )
+
+        hard_constraints = self.session.execute(hc_stmt).scalars().all()
 
         crit_violated_count = 0
         for hc in hard_constraints:
@@ -301,6 +324,69 @@ class ControlTowerService:
     # 3. Mission Operations View
     # -----------------------------------------------------------------------
 
+    def _build_mission_operations_item(
+        self, m: MissionModel, r_res: Any, r_state: str
+    ) -> MissionOperationsItem:
+        """Helper to construct a typed MissionOperationsItem with evaluated context."""
+        c_summary = self.constraint_service.evaluate_for_entity("MISSION", m.id)
+        violated_constraints = [
+            c.model_dump() for c in c_summary.results if c.state == ConstraintState.VIOLATED
+        ]
+
+        replans = list(
+            self.session.execute(
+                select(ReplanModel).where(
+                    or_(
+                        ReplanModel.mission_id == m.id,
+                        ReplanModel.trigger_entity_id == m.id,
+                    ),
+                    ReplanModel.status.in_([
+                        ReplanStatus.REQUESTED.value,
+                        ReplanStatus.ANALYZING.value,
+                        ReplanStatus.OPTIONS_READY.value,
+                        ReplanStatus.AWAITING_APPROVAL.value,
+                    ])
+                )
+            ).scalars().all()
+        )
+        replan_list = [
+            {"replan_id": str(r.id), "replan_code": r.replan_code, "status": r.status}
+            for r in replans
+        ]
+
+        latest_ev_model = self.session.execute(
+            select(OperationalEventModel)
+            .where(
+                OperationalEventModel.entity_type == "MISSION",
+                OperationalEventModel.entity_id == m.id,
+            )
+            .order_by(OperationalEventModel.occurred_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+
+        latest_ev = None
+        if latest_ev_model:
+            latest_ev = OperationalEventFeedItem.model_validate(latest_ev_model)
+
+        return MissionOperationsItem(
+            mission_id=m.id,
+            code=m.code,
+            title=m.title,
+            status=m.status,
+            priority=m.priority,
+            type=m.type,
+            required_by_at=m.required_by_at,
+            location_id=m.location_id,
+            readiness_state=r_state,
+            readiness_blockers=[b.model_dump() for b in r_res.blockers],
+            warnings=[w.model_dump() for w in r_res.warnings],
+            unknown_requirements=[u.model_dump() for u in r_res.unknown_requirements],
+            violated_constraints=violated_constraints,
+            pending_replans=replan_list,
+            latest_event=latest_ev,
+            data_provenance="DERIVED",
+        )
+
     def get_mission_operations_view(
         self,
         expedition_id: uuid.UUID,
@@ -318,84 +404,41 @@ class ControlTowerService:
         if status:
             stmt = stmt.where(MissionModel.status == status.upper())
 
-        all_missions = list(self.session.execute(stmt.order_by(MissionModel.code.asc())).scalars().all())
-
+        offset = (page - 1) * page_size
         items: List[MissionOperationsItem] = []
-        for m in all_missions:
-            r_res = self.mission_readiness.evaluate(m.id)
-            r_state = r_res.state.value if hasattr(r_res.state, "value") else str(r_res.state)
 
-            if readiness and r_state != readiness.upper():
-                continue
+        if readiness is None:
+            count_stmt = select(func.count(MissionModel.id)).where(MissionModel.expedition_id == expedition_id)
+            if status:
+                count_stmt = count_stmt.where(MissionModel.status == status.upper())
+            total = self.session.execute(count_stmt).scalar() or 0
 
-            # Check violated constraints
-            c_summary = self.constraint_service.evaluate_for_entity("MISSION", m.id)
-            violated_constraints = [
-                c.model_dump() for c in c_summary.results if c.state == ConstraintState.VIOLATED
-            ]
-
-            # Pending replans for this mission
-            replans = list(
+            paged_missions = list(
                 self.session.execute(
-                    select(ReplanModel).where(
-                        or_(
-                            ReplanModel.mission_id == m.id,
-                            ReplanModel.trigger_entity_id == m.id,
-                        ),
-                        ReplanModel.status.in_([
-                            ReplanStatus.REQUESTED.value,
-                            ReplanStatus.ANALYZING.value,
-                            ReplanStatus.OPTIONS_READY.value,
-                            ReplanStatus.AWAITING_APPROVAL.value,
-                        ])
-                    )
+                    stmt.order_by(MissionModel.code.asc())
+                    .offset(offset)
+                    .limit(page_size)
                 ).scalars().all()
             )
-            replan_list = [
-                {"replan_id": str(r.id), "replan_code": r.replan_code, "status": r.status}
-                for r in replans
-            ]
+            for m in paged_missions:
+                r_res = self.mission_readiness.evaluate(m.id)
+                r_state = r_res.state.value if hasattr(r_res.state, "value") else str(r_res.state)
+                items.append(self._build_mission_operations_item(m, r_res, r_state))
+            return items, total
+        else:
+            all_missions = list(self.session.execute(stmt.order_by(MissionModel.code.asc())).scalars().all())
+            matching_tuples = []
+            for m in all_missions:
+                r_res = self.mission_readiness.evaluate(m.id)
+                r_state = r_res.state.value if hasattr(r_res.state, "value") else str(r_res.state)
+                if r_state == readiness.upper():
+                    matching_tuples.append((m, r_res, r_state))
 
-            # Latest operational event referencing this mission
-            latest_ev_model = self.session.execute(
-                select(OperationalEventModel)
-                .where(
-                    OperationalEventModel.entity_type == "MISSION",
-                    OperationalEventModel.entity_id == m.id,
-                )
-                .order_by(OperationalEventModel.occurred_at.desc())
-                .limit(1)
-            ).scalar_one_or_none()
-
-            latest_ev = None
-            if latest_ev_model:
-                latest_ev = OperationalEventFeedItem.model_validate(latest_ev_model)
-
-            items.append(
-                MissionOperationsItem(
-                    mission_id=m.id,
-                    code=m.code,
-                    title=m.title,
-                    status=m.status,
-                    priority=m.priority,
-                    type=m.type,
-                    required_by_at=m.required_by_at,
-                    location_id=m.location_id,
-                    readiness_state=r_state,
-                    readiness_blockers=[b.model_dump() for b in r_res.blockers],
-                    warnings=[w.model_dump() for w in r_res.warnings],
-                    unknown_requirements=[u.model_dump() for u in r_res.unknown_requirements],
-                    violated_constraints=violated_constraints,
-                    pending_replans=replan_list,
-                    latest_event=latest_ev,
-                    data_provenance="DERIVED",
-                )
-            )
-
-        total = len(items)
-        offset = (page - 1) * page_size
-        paged_items = items[offset : offset + page_size]
-        return paged_items, total
+            total = len(matching_tuples)
+            paged_tuples = matching_tuples[offset : offset + page_size]
+            for m, r_res, r_state in paged_tuples:
+                items.append(self._build_mission_operations_item(m, r_res, r_state))
+            return items, total
 
     # -----------------------------------------------------------------------
     # 4. Operational Events Feed
@@ -485,6 +528,31 @@ class ControlTowerService:
     # 5. Active Risk / Constraints View
     # -----------------------------------------------------------------------
 
+    def _build_constraint_item(
+        self, c: ConstraintModel, eval_res: Any = None, state_val: str = None
+    ) -> ControlTowerConstraintItem:
+        """Helper to construct a typed ControlTowerConstraintItem with evaluated context."""
+        if eval_res is None or state_val is None:
+            eval_res = self.constraint_service.evaluate_constraint(c)
+            state_val = eval_res.state.value if hasattr(eval_res.state, "value") else str(eval_res.state)
+
+        return ControlTowerConstraintItem(
+            constraint_id=c.id,
+            code=c.code,
+            name=c.name,
+            type=c.type,
+            rule_code=c.rule_code,
+            subject_type=c.subject_type or "UNKNOWN",
+            subject_id=c.subject_id or uuid.UUID(int=0),
+            subject_code=getattr(c, "subject_code", None),
+            hard_or_soft=c.hard_or_soft,
+            severity=c.severity,
+            state=state_val,
+            reason=eval_res.reason,
+            evidence=eval_res.evidence,
+            data_provenance="DERIVED",
+        )
+
     def get_active_constraints(
         self,
         expedition_id: Optional[uuid.UUID] = None,
@@ -522,39 +590,37 @@ class ControlTowerService:
                 )
             )
 
-        all_constraints = list(self.session.execute(stmt.order_by(ConstraintModel.code.asc())).scalars().all())
-
-        items: List[ControlTowerConstraintItem] = []
-        for c in all_constraints:
-            eval_res = self.constraint_service.evaluate_constraint(c)
-            st_val = eval_res.state.value if hasattr(eval_res.state, "value") else str(eval_res.state)
-
-            if state and st_val != state.upper():
-                continue
-
-            items.append(
-                ControlTowerConstraintItem(
-                    constraint_id=c.id,
-                    code=c.code,
-                    name=c.name,
-                    type=c.type,
-                    rule_code=c.rule_code,
-                    subject_type=c.subject_type or "UNKNOWN",
-                    subject_id=c.subject_id or uuid.UUID(int=0),
-                    subject_code=getattr(c, "subject_code", None),
-                    hard_or_soft=c.hard_or_soft,
-                    severity=c.severity,
-                    state=st_val,
-                    reason=eval_res.reason,
-                    evidence=eval_res.evidence,
-                    data_provenance="DERIVED",
-                )
-            )
-
-        total = len(items)
         offset = (page - 1) * page_size
-        paged_items = items[offset : offset + page_size]
-        return paged_items, total
+        items: List[ControlTowerConstraintItem] = []
+
+        if state is None:
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total = self.session.execute(count_stmt).scalar() or 0
+
+            paged_constraints = list(
+                self.session.execute(
+                    stmt.order_by(ConstraintModel.code.asc())
+                    .offset(offset)
+                    .limit(page_size)
+                ).scalars().all()
+            )
+            for c in paged_constraints:
+                items.append(self._build_constraint_item(c))
+            return items, total
+        else:
+            all_constraints = list(self.session.execute(stmt.order_by(ConstraintModel.code.asc())).scalars().all())
+            matching_tuples = []
+            for c in all_constraints:
+                eval_res = self.constraint_service.evaluate_constraint(c)
+                st_val = eval_res.state.value if hasattr(eval_res.state, "value") else str(eval_res.state)
+                if st_val == state.upper():
+                    matching_tuples.append((c, eval_res, st_val))
+
+            total = len(matching_tuples)
+            paged_tuples = matching_tuples[offset : offset + page_size]
+            for c, eval_res, st_val in paged_tuples:
+                items.append(self._build_constraint_item(c, eval_res=eval_res, state_val=st_val))
+            return items, total
 
     # -----------------------------------------------------------------------
     # 6. Replan / Recommendation / Approval Decision Queue
