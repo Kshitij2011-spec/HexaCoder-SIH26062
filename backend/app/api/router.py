@@ -63,4 +63,3 @@ api_v1_router.include_router(reasoning_router)
 api_v1_router.include_router(control_tower_router, prefix="/control-tower")
 
 __all__ = ["api_v1_router"]
-
