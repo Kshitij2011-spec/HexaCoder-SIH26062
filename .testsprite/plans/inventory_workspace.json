@@ -1,0 +1,60 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.12.0/schemas/plan.schema.json",
+  "projectId": "prj_polarops_track_b",
+  "type": "frontend",
+  "name": "Inventory workspace catalog, authoritative availability formula, stock lots, and mutations",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to /inventory on the PolarOps frontend"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify Inventory Management workspace header 'Inventory Management - Polar supplies catalog, stock lots by facility, and immutable ledger' is visible"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify item search input, category filter, and criticality filter dropdowns are present"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify inventory catalog table renders item codes, names, categories, and criticality badges"
+    },
+    {
+      "type": "action",
+      "description": "Click on an inventory item row or inspect button to open the InventoryDetailPanel drawer"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify drawer displays item specifications (category, criticality, unit of measure, temperature ranges, data provenance)"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify authoritative availability indicator shows backend formula: available = on_hand - reserved - quarantined - damaged"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify stock lots table lists active lots with lot numbers, locations, on-hand, and availability"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify immutable transaction ledger table renders timestamp, type, quantity, balance after, and reference"
+    },
+    {
+      "type": "action",
+      "description": "Select RECEIVE tab in Lot Workflows, enter quantity and reference, and click Execute RECEIVE"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify confirmation dialog appears with operation summary before submission"
+    },
+    {
+      "type": "action",
+      "description": "Confirm action and verify stock availability and transaction ledger update upon mutation completion"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify negative input paths (e.g. non-positive quantities) are rejected with validation error"
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.12.0/schemas/plan.schema.json",
+  "projectId": "prj_polarops_track_b",
+  "type": "frontend",
+  "name": "Assets & Maintenance workspace registry, state machine, maintenance lifecycle, and relocation",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to /assets on the PolarOps frontend"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify Assets workspace header 'Assets & Equipment - Polar field gear, critical infrastructure, maintenance lifecycle, and relocation' is visible"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify search input, asset type dropdown, and status filter selectors are present"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify asset registry table renders asset codes, serial numbers, types, statuses, conditions, and locations"
+    },
+    {
+      "type": "action",
+      "description": "Click on an asset code chip or inspect button to open the AssetDetailPanel drawer"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify drawer displays specifications, current location, condition, and state transition actions"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify terminal RETIRED state behavior disables further mutations and displays terminal notice"
+    },
+    {
+      "type": "action",
+      "description": "Click 'Schedule Maintenance' button to open scheduling workflow"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify maintenance modal captures priority, scheduled date, technician, description, and validates required fields"
+    },
+    {
+      "type": "action",
+      "description": "Click 'Start' or 'Complete' on a maintenance record"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify completion workflow captures findings, corrective actions, and target asset status"
+    },
+    {
+      "type": "action",
+      "description": "Select destination location and execute asset relocation workflow"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify confirmation dialog warns of consequential move before executing relocation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify operational timeline displays chronological events, actor context, and data provenance"
+    }
+  ]
+}
