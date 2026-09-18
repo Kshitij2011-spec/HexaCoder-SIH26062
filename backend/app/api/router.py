@@ -9,6 +9,7 @@ from backend.app.domains.time_windows.router import router as time_windows_route
 from backend.app.domains.locations.router import router as locations_router
 from backend.app.domains.transport.router import router as transport_router
 from backend.app.domains.cargo.router import router as cargo_router
+from backend.app.domains.inventory.router import router as inventory_router
 from backend.app.platform.events.router import router as events_router
 from backend.app.db.session import get_db_health
 from backend.app.core.config import settings
@@ -46,6 +47,7 @@ api_v1_router.include_router(time_windows_router)
 api_v1_router.include_router(locations_router)
 api_v1_router.include_router(transport_router)
 api_v1_router.include_router(cargo_router)
+api_v1_router.include_router(inventory_router)
 api_v1_router.include_router(events_router)
 
 __all__ = ["api_v1_router"]
