@@ -7,6 +7,7 @@ import { AssetStatusActions } from './AssetStatusActions';
 import { MaintenanceTable } from './MaintenanceTable';
 import { MaintenanceWorkflow } from './MaintenanceWorkflow';
 import { AssetTimeline } from './AssetTimeline';
+import { OperationalTimeline } from '../../components/shared/OperationalTimeline';
 import { useAssetTimeline } from './hooks/useAssetTimeline';
 import { useMaintenanceRecords } from './hooks/useMaintenanceRecords';
 import type { Asset, MaintenanceRecord } from '../../lib/types/api';
@@ -155,7 +156,7 @@ export function AssetDetailPanel({ asset, onClose, onRefreshAsset }: Props) {
         </section>
 
         {/* Operational Timeline Section */}
-        <section className="space-y-3 pt-4 border-t border-slate-800">
+        <section className="space-y-4 pt-4 border-t border-slate-800">
           <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
             <Clock className="w-4 h-4 text-cyan-400" aria-hidden="true" />
             Operational Event History
@@ -163,6 +164,12 @@ export function AssetDetailPanel({ asset, onClose, onRefreshAsset }: Props) {
           <AssetTimeline
             entries={timelineData?.history ?? []}
             isLoading={isTimelineLoading}
+          />
+          <OperationalTimeline
+            entityType="ASSET"
+            entityId={asset.id}
+            title="Cross-Domain Operational History & Audit Log"
+            defaultIncludeRelated={true}
           />
         </section>
       </div>

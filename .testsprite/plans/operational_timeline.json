@@ -1,0 +1,52 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.12.0/schemas/plan.schema.json",
+  "projectId": "prj_polarops_track_b",
+  "type": "frontend",
+  "name": "Logistics Operational Timeline & Cross-Domain History Verification",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the Cargo Consignments workspace and select a consignment to open its detail drawer"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify Operational Timeline component renders with timeline entries and include-related toggle"
+    },
+    {
+      "type": "action",
+      "description": "Toggle the Include Related checkbox on the timeline component"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify related packages and transport legs events appear in the merged timeline"
+    },
+    {
+      "type": "action",
+      "description": "Toggle sorting order from Newest to Oldest"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify timeline entries reverse order chronologically with deterministic tie-breaking"
+    },
+    {
+      "type": "action",
+      "description": "Expand a timeline entry item"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify metadata viewer displays snapshot diffs, evidence, and correlation ID"
+    },
+    {
+      "type": "action",
+      "description": "Navigate to Transport, Assets, Incidents, Inventory, and Locations workspaces"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify OperationalTimeline renders seamlessly across all Track B entity detail panels"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify timeline retrieval endpoint GET /api/v1/operations/timeline/{entity_type}/{entity_id} is strictly read-only and emits 0 mutations"
+    }
+  ]
+}

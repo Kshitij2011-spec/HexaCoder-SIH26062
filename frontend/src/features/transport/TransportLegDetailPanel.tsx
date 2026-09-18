@@ -10,6 +10,7 @@ import { ErrorDisplay } from '../../components/shared/ErrorDisplay';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { TransportLegCargo } from './TransportLegCargo';
 import { DelayWorkflow } from './DelayWorkflow';
+import { OperationalTimeline } from '../../components/shared/OperationalTimeline';
 import type { TransportStatus } from '../../lib/types/api';
 
 interface Props {
@@ -280,6 +281,14 @@ export function TransportLegDetailPanel({ legId, onClose, onSelectConsignment }:
                     </button>
                   </div>
                 </div>
+
+                {/* Operational History & Event Journal */}
+                <OperationalTimeline
+                  entityType="TRANSPORT_LEG"
+                  entityId={leg.id}
+                  title="Transport Leg Operational History"
+                  defaultIncludeRelated={true}
+                />
 
                 <ConfirmDialog
                   isOpen={confirmPending}

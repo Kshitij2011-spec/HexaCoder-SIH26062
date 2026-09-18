@@ -8,6 +8,7 @@ import { StockLotsTable } from './StockLotsTable';
 import { AvailabilityIndicator } from './AvailabilityIndicator';
 import { InventoryTransactionsTable } from './InventoryTransactionsTable';
 import { InventoryActions } from './InventoryActions';
+import { OperationalTimeline } from '../../components/shared/OperationalTimeline';
 import { useStockLots } from './hooks/useStockLots';
 import { useStockAvailability } from './hooks/useStockAvailability';
 import { useInventoryTransactions } from './hooks/useInventoryTransactions';
@@ -191,6 +192,16 @@ export function InventoryDetailPanel({ item, onClose }: Props) {
             </div>
           </section>
         )}
+
+        {/* Operational Timeline Section */}
+        <section className="space-y-3 pt-4 border-t border-slate-800">
+          <OperationalTimeline
+            entityType="INVENTORY_ITEM"
+            entityId={item.id}
+            title="Inventory Item Operational Timeline"
+            defaultIncludeRelated={true}
+          />
+        </section>
       </div>
     </div>
   );

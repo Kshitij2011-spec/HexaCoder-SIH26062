@@ -11,6 +11,7 @@ import { ErrorDisplay } from '../../components/shared/ErrorDisplay';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { ConsignmentTimeline } from './ConsignmentTimeline';
 import { ConsignmentPackagesTable } from './ConsignmentPackagesTable';
+import { OperationalTimeline } from '../../components/shared/OperationalTimeline';
 import type { CargoStatus } from '../../lib/types/api';
 
 interface Props {
@@ -213,7 +214,15 @@ export function ConsignmentDetailPanel({ consignmentId, onClose }: Props) {
 
             {/* Tab: Timeline */}
             {activeTab === 'timeline' && (
-              <ConsignmentTimeline consignmentId={consignment.id} />
+              <div className="space-y-6">
+                <ConsignmentTimeline consignmentId={consignment.id} />
+                <OperationalTimeline
+                  entityType="CARGO_CONSIGNMENT"
+                  entityId={consignment.id}
+                  title="Consignment Operational Event History"
+                  defaultIncludeRelated={true}
+                />
+              </div>
             )}
 
             {/* Tab: Packages */}
