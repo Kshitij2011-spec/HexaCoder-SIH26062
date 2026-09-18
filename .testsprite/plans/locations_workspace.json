@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.12.0/schemas/plan.schema.json",
+  "projectId": "prj_polarops_track_b",
+  "type": "frontend",
+  "name": "Locations workspace navigation and operational state transitions",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to /locations on the PolarOps frontend"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify Locations workspace header 'Locations - Operational facilities, field depots, and logistics nodes' is visible"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify status filter buttons (All, Available, Restricted, Inaccessible, Closed) and search input are present"
+    },
+    {
+      "type": "action",
+      "description": "Click on a location row or code chip to open the LocationDetailPanel drawer"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify drawer displays location metadata, coordinates, data provenance tag, and allowed operational state transition buttons"
+    },
+    {
+      "type": "action",
+      "description": "Click a transition button (e.g. RESTRICTED) to prompt confirmation dialog"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify confirmation dialog opens before mutation is submitted"
+    }
+  ]
+}

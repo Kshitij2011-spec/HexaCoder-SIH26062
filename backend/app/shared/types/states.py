@@ -164,5 +164,3 @@ class ItemCriticality(str, Enum):
     MISSION_CRITICAL = "MISSION_CRITICAL"
     LIFE_SUPPORT = "LIFE_SUPPORT"
     SAFETY = "SAFETY"
-
-

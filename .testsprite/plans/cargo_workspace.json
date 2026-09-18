@@ -1,0 +1,44 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.12.0/schemas/plan.schema.json",
+  "projectId": "prj_polarops_track_b",
+  "type": "frontend",
+  "name": "Cargo workspace manifests, schedule risk indicators, and packages",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to /cargo on the PolarOps frontend"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify Cargo Consignments workspace header 'Cargo Consignments - Operational cargo manifests, transit tracking, and schedule risk' is visible"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify search input, cargo status dropdown, and risk level pills (All Risks, Nominal, Moderate, Elevated, Critical) are present"
+    },
+    {
+      "type": "action",
+      "description": "Click on a consignment code chip or row to open the ConsignmentDetailPanel drawer"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify drawer displays consignment overview with priority, route, compliance status, and provenance tag"
+    },
+    {
+      "type": "action",
+      "description": "Click on the 'Timeline' tab"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify operational timeline displays schedule milestones, buffer hours, and risk assessment"
+    },
+    {
+      "type": "action",
+      "description": "Click on the 'Packages' tab"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify cargo packages sub-table renders packages and provides 'Add Package' button"
+    }
+  ]
+}
