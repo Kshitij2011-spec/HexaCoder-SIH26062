@@ -4,7 +4,11 @@ import uuid
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, desc
-from backend.app.domains.incidents.models import IncidentModel, IncidentReferenceModel
+from backend.app.domains.incidents.models import (
+    IncidentModel,
+    IncidentReferenceModel,
+    IncidentPropagationModel,
+)
 
 
 class IncidentRepository:
@@ -102,3 +106,54 @@ class IncidentRepository:
         self.session.add(reference)
         self.session.flush()
         return reference
+
+    # ============================================================
+    # 3. INCIDENT PROPAGATIONS
+    # ============================================================
+
+    def create_propagation(self, propagation: IncidentPropagationModel) -> IncidentPropagationModel:
+        self.session.add(propagation)
+        self.session.flush()
+        return propagation
+
+    def list_propagations_by_incident(
+        self,
+        incident_id: uuid.UUID,
+    ) -> List[IncidentPropagationModel]:
+        stmt = (
+            select(IncidentPropagationModel)
+            .where(IncidentPropagationModel.incident_id == incident_id)
+            .order_by(IncidentPropagationModel.created_at.asc())
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
+    def get_propagation_by_target(
+        self,
+        incident_id: uuid.UUID,
+        reference_type: str,
+        reference_id: uuid.UUID,
+        action: Optional[str] = None,
+    ) -> Optional[IncidentPropagationModel]:
+        stmt = select(IncidentPropagationModel).where(
+            IncidentPropagationModel.incident_id == incident_id,
+            IncidentPropagationModel.reference_type == reference_type,
+            IncidentPropagationModel.reference_id == reference_id,
+        )
+        if action:
+            stmt = stmt.where(IncidentPropagationModel.action == action)
+        return self.session.execute(stmt).scalar_one_or_none()
+
+    def get_applied_propagation(
+        self,
+        incident_id: uuid.UUID,
+        reference_type: str,
+        reference_id: uuid.UUID,
+    ) -> Optional[IncidentPropagationModel]:
+        stmt = select(IncidentPropagationModel).where(
+            IncidentPropagationModel.incident_id == incident_id,
+            IncidentPropagationModel.reference_type == reference_type,
+            IncidentPropagationModel.reference_id == reference_id,
+            IncidentPropagationModel.status == "APPLIED",
+        )
+        return self.session.execute(stmt).scalar_one_or_none()
+

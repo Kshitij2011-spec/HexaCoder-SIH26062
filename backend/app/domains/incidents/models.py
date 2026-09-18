@@ -42,6 +42,12 @@ class IncidentModel(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    propagations = relationship(
+        "IncidentPropagationModel",
+        back_populates="incident",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     @property
     def incident_type(self) -> str:
@@ -71,4 +77,32 @@ class IncidentReferenceModel(Base):
 
     __table_args__ = (
         UniqueConstraint("incident_id", "reference_type", "reference_id", name="uq_incident_reference_target"),
+    )
+
+
+class IncidentPropagationModel(Base):
+    """
+    Incident Propagation Record mapping to public.incident_propagations.
+    Records cross-domain operational impact propagation attempts and outcomes.
+    """
+    __tablename__ = "incident_propagations"
+
+    id = Column(PG_UUID, primary_key=True, default=uuid.uuid4)
+    incident_id = Column(PG_UUID, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
+    reference_id = Column(PG_UUID, nullable=False)
+    reference_type = Column(String(50), nullable=False)
+    action = Column(String(100), nullable=False)
+    status = Column(String(50), nullable=False)
+    previous_state = Column(String(100), nullable=True)
+    resulting_state = Column(String(100), nullable=True)
+    reason = Column(Text, nullable=True)
+    event_id = Column(PG_UUID, nullable=True)
+    audit_id = Column(PG_UUID, nullable=True)
+    operational_metadata = Column(PG_JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    incident = relationship("IncidentModel", back_populates="propagations")
+
+    __table_args__ = (
+        UniqueConstraint("incident_id", "reference_type", "reference_id", "action", name="uq_incident_propagation_action"),
     )

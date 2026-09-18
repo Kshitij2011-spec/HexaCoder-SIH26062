@@ -1,0 +1,136 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.12.0/schemas/plan.schema.json",
+  "projectId": "prj_polarops_track_b",
+  "type": "frontend",
+  "name": "Incident Propagation & Cross-Domain Operational Impact Verification",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Create an active HIGH severity incident referencing an AVAILABLE location"
+    },
+    {
+      "type": "action",
+      "description": "Invoke POST /api/v1/incidents/{incident_id}/propagate"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify location propagation returns APPLIED with action RESTRICT_LOCATION and resulting_state RESTRICTED"
+    },
+    {
+      "type": "action",
+      "description": "Create a CRITICAL severity incident referencing an AVAILABLE location"
+    },
+    {
+      "type": "action",
+      "description": "Invoke POST /api/v1/incidents/{incident_id}/propagate"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify location propagation returns APPLIED with action ISOLATE_LOCATION and resulting_state INACCESSIBLE"
+    },
+    {
+      "type": "action",
+      "description": "Create a LOW severity incident referencing an AVAILABLE location and trigger propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify location propagation returns SKIPPED with reason indicating LOW severity does not restrict locations"
+    },
+    {
+      "type": "action",
+      "description": "Attach an AVAILABLE asset to a HIGH severity incident and trigger propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify asset propagation returns APPLIED with action MAINTENANCE_ASSET and resulting_state MAINTENANCE"
+    },
+    {
+      "type": "action",
+      "description": "Attach an AVAILABLE asset to a CRITICAL severity incident and trigger propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify asset propagation returns APPLIED with action QUARANTINE_ASSET and resulting_state QUARANTINED"
+    },
+    {
+      "type": "action",
+      "description": "Attach an available inventory stock lot to a HIGH severity incident and trigger propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify inventory propagation returns APPLIED with action QUARANTINE_STOCK, reduces available stock, and appends a QUARANTINE ledger transaction"
+    },
+    {
+      "type": "action",
+      "description": "Trigger propagation again on the same incident referencing the quarantined stock lot"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify idempotent propagation returns SKIPPED without creating duplicate quarantine transactions"
+    },
+    {
+      "type": "action",
+      "description": "Attach a cargo consignment to an active incident and trigger propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify cargo reference returns REQUIRES_OPERATOR_ACTION without artificial status mutation"
+    },
+    {
+      "type": "action",
+      "description": "Attach a transport leg with explicit delay metadata (new_estimated_arrival_at) and trigger propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify transport leg returns APPLIED with action DELAY_TRANSPORT and resulting_state DELAYED"
+    },
+    {
+      "type": "action",
+      "description": "Attach a transport leg without explicit delay metadata and trigger propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify transport leg returns REQUIRES_OPERATOR_ACTION with reason requiring explicit ETA or delay duration"
+    },
+    {
+      "type": "action",
+      "description": "Attach an unsupported reference type to an incident and trigger propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify propagation returns NOT_SUPPORTED without crashing the request"
+    },
+    {
+      "type": "action",
+      "description": "Attach a RETIRED asset to an active incident and trigger propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify propagation returns REJECTED in accordance with terminal state invariants"
+    },
+    {
+      "type": "action",
+      "description": "Attempt POST /api/v1/incidents/{incident_id}/propagate on a CLOSED incident"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify HTTP 409 Conflict is returned and no downstream mutations occur"
+    },
+    {
+      "type": "action",
+      "description": "Create a multi-reference incident with mixed targets (valid location, retired asset, cargo) and trigger propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify response summary reports mixed outcomes: APPLIED, REJECTED, and REQUIRES_OPERATOR_ACTION"
+    },
+    {
+      "type": "action",
+      "description": "Invoke GET /api/v1/incidents/{incident_id}/propagation"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify historical propagation records are retrieved with matching statuses and operational metadata"
+    }
+  ]
+}
