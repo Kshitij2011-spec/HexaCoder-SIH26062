@@ -19,7 +19,7 @@ $hasFailed = $false
 # 1. Backend Pytest Verification
 Write-Host "`n[1/3] Running Backend Unit and Schema Tests..." -ForegroundColor Yellow
 try {
-    python -m pytest tests/test_database_schema_and_seed.py -v -p no:cacheprovider
+    python -m pytest tests/ -v -p no:cacheprovider
     if ($LASTEXITCODE -ne 0) {
         Write-Host "X Backend pytest tests FAILED." -ForegroundColor Red
         $hasFailed = $true
