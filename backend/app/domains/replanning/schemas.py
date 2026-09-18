@@ -21,7 +21,7 @@ class ReplanTriggerRequest(BaseModel):
         default="OPERATOR_REQUESTED",
         description="Mode of trigger: 'OPERATOR_REQUESTED' or 'EVENT_TRIGGERED'"
     )
-    expedition_id: uuid.UUID
+    expedition_id: Optional[uuid.UUID] = None
     mission_id: Optional[uuid.UUID] = None
     trigger_event_id: Optional[uuid.UUID] = None
     trigger_entity_type: Optional[str] = None
@@ -34,7 +34,7 @@ class ReplanTriggerRequest(BaseModel):
 
 class ReplanCreate(BaseModel):
     """Internal schema for creating a replan entity."""
-    expedition_id: uuid.UUID
+    expedition_id: Optional[uuid.UUID] = None
     mission_id: Optional[uuid.UUID] = None
     replan_code: Optional[str] = None
     trigger_event_id: Optional[uuid.UUID] = None
@@ -131,6 +131,8 @@ class ReplanRead(BaseModel):
 
 class ApprovalDecisionRequest(BaseModel):
     """Payload for submitting a human operator approval decision."""
+    model_config = ConfigDict(extra="forbid")
+
     approver_person_id: uuid.UUID
     approver_role: Optional[str] = "EXPEDITION_OPERATOR"
     decision: ApprovalDecision
@@ -158,9 +160,12 @@ class ApprovalRead(BaseModel):
 
 class ReplanApplyRequest(BaseModel):
     """Payload for executing an approved operational recommendation."""
+    model_config = ConfigDict(extra="forbid")
+
     actor_person_id: uuid.UUID
     comment: Optional[str] = Field(None, description="Operator comment accompanying application")
     correlation_id: Optional[uuid.UUID] = None
+
 
 
 class ReplanApplyResult(BaseModel):

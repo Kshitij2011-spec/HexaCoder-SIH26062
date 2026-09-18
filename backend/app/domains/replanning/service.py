@@ -36,6 +36,7 @@ from backend.app.platform.audit.service import AuditService
 from backend.app.domains.transport.service import TransportService
 from backend.app.domains.transport.schemas import TransportLegUpdate
 from backend.app.domains.transport.models import TransportLegModel
+from backend.app.domains.cargo.models import CargoConsignmentModel
 from backend.app.domains.missions.service import MissionService
 from backend.app.domains.missions.schemas import MissionUpdate
 from backend.app.domains.missions.models import MissionModel
@@ -83,25 +84,26 @@ class ReplanService:
         violated_constraints = []
         affected_entities = []
 
-        # If trigger entity is provided or trigger event is provided, compute derived impact
-        if request.trigger_entity_type and request.trigger_entity_id:
-            impact_result = self.impact_service.calculate_impact(
-                entity_type=request.trigger_entity_type,
-                entity_id=request.trigger_entity_id,
-                change_summary=request.reason,
-                depth=request.depth,
-                correlation_id=cid,
-            )
-        elif request.trigger_event_id:
+        event = None
+        if request.trigger_event_id:
             event = self.event_service.get_event(request.trigger_event_id)
             if not event:
                 raise EntityNotFoundError("OperationalEvent", request.trigger_event_id)
+            cid = event.correlation_id or cid
             impact_result = self.impact_service.calculate_impact(
                 entity_type=event.entity_type,
                 entity_id=event.entity_id,
-                change_summary=f"Event {event.event_type}: {event.previous_state} -> {event.new_state}",
+                change_summary=request.reason or f"Event {event.event_type}: {event.previous_state} -> {event.new_state}",
                 depth=request.depth,
-                correlation_id=event.correlation_id or cid,
+                correlation_id=cid,
+            )
+        elif request.trigger_entity_type and request.trigger_entity_id:
+            impact_result = self.impact_service.calculate_impact(
+                entity_type=request.trigger_entity_type,
+                entity_id=request.trigger_entity_id,
+                change_summary=request.reason or "Operational analysis",
+                depth=request.depth,
+                correlation_id=cid,
             )
 
         if impact_result:
@@ -132,6 +134,53 @@ class ReplanService:
                 field="trigger_mode",
             )
 
+        # Resolve entity references and inferred expedition/mission
+        trigger_entity_type = (
+            request.trigger_entity_type.upper()
+            if request.trigger_entity_type
+            else (event.entity_type if event else None)
+        )
+        trigger_entity_id = (
+            request.trigger_entity_id
+            if request.trigger_entity_id
+            else (event.entity_id if event else None)
+        )
+        trigger_reason = (
+            request.reason
+            if request.reason
+            else (
+                f"Operational event {event.event_type} on {event.entity_type}: {event.previous_state} -> {event.new_state}"
+                if event
+                else "Operational replan requested"
+            )
+        )
+
+        expedition_id = request.expedition_id
+        if not expedition_id and trigger_entity_type and trigger_entity_id:
+            if trigger_entity_type == "TRANSPORT_LEG":
+                leg_ent = self.session.get(TransportLegModel, trigger_entity_id)
+                if leg_ent:
+                    expedition_id = leg_ent.expedition_id
+            elif trigger_entity_type == "CARGO_CONSIGNMENT":
+                c_ent = self.session.get(CargoConsignmentModel, trigger_entity_id)
+                if c_ent:
+                    expedition_id = c_ent.expedition_id
+            elif trigger_entity_type == "MISSION":
+                m_ent = self.session.get(MissionModel, trigger_entity_id)
+                if m_ent:
+                    expedition_id = m_ent.expedition_id
+
+        mission_id = request.mission_id
+        if not mission_id and affected_entities:
+            for aff in affected_entities:
+                if aff.get("entity_type") == "MISSION":
+                    mission_id = uuid.UUID(str(aff["entity_id"]))
+                    break
+        if not expedition_id and mission_id:
+            m_ent = self.session.get(MissionModel, mission_id)
+            if m_ent:
+                expedition_id = m_ent.expedition_id
+
         # Generate unique replan code
         code_seq = self.repo.session.execute(
             select(ReplanModel.id)
@@ -140,7 +189,7 @@ class ReplanService:
 
         evidence_dict = {
             "trigger_mode": mode,
-            "reason": request.reason,
+            "reason": trigger_reason,
             "total_affected_entities": len(affected_entities),
             "total_violated_constraints": len(violated_constraints),
         }
@@ -148,12 +197,12 @@ class ReplanService:
         replan = ReplanModel(
             id=uuid.uuid4(),
             replan_code=replan_code,
-            expedition_id=request.expedition_id,
-            mission_id=request.mission_id,
+            expedition_id=expedition_id or uuid.UUID(int=0),
+            mission_id=mission_id,
             trigger_event_id=request.trigger_event_id,
-            trigger_entity_type=request.trigger_entity_type.upper() if request.trigger_entity_type else None,
-            trigger_entity_id=request.trigger_entity_id,
-            trigger_reason=request.reason,
+            trigger_entity_type=trigger_entity_type,
+            trigger_entity_id=trigger_entity_id,
+            trigger_reason=trigger_reason,
             status=ReplanStatus.REQUESTED.value,
             current_state_evidence=evidence_dict,
             violated_constraints=violated_constraints,
@@ -190,10 +239,39 @@ class ReplanService:
                 correlation_id=cid,
                 actor_user_id=None,
                 actor_person_id=request.requested_by,
-                metadata={"trigger_mode": mode, "reason": request.reason},
+                metadata={"trigger_mode": mode, "reason": trigger_reason},
             )
 
         return created
+
+    def create_replan_from_event(
+        self,
+        event_id: uuid.UUID,
+        requested_by: Optional[uuid.UUID] = None,
+        depth: int = 4,
+        actor_context: Optional[Dict[str, Any]] = None,
+    ) -> ReplanModel:
+        """
+        Direct event-triggered replan creation:
+        Evaluates operational impact and hard constraint violations from an OperationalEvent.
+        Creates an EVENT_TRIGGERED replan without requiring prior operator-created request.
+        """
+        event = self.event_service.get_event(event_id)
+        if not event:
+            raise EntityNotFoundError("OperationalEvent", event_id)
+
+        req = ReplanTriggerRequest(
+            trigger_mode="EVENT_TRIGGERED",
+            trigger_event_id=event.event_id,
+            trigger_entity_type=event.entity_type,
+            trigger_entity_id=event.entity_id,
+            reason=f"Event disruption: {event.event_type} on {event.entity_type} ({event.previous_state} -> {event.new_state})",
+            requested_by=requested_by,
+            correlation_id=event.correlation_id,
+            depth=depth,
+        )
+        return self.create_replan_request(req, actor_context=actor_context)
+
 
     def get_replan(self, replan_id: uuid.UUID) -> ReplanModel:
         replan = self.repo.get_replan_by_id(replan_id)
@@ -344,14 +422,25 @@ class ReplanService:
                 continue
 
             current_req = mission.required_by_at or datetime.now(timezone.utc)
-            # Propose extending deadline by 7 days to accommodate transport arrival
-            new_date = current_req + timedelta(days=7)
+
+            # Derive adjustment delay dynamically from domain transport facts
+            delay_days = 7  # baseline expedition seasonal buffer
+            if impacted_transport_ids:
+                for leg_id in impacted_transport_ids:
+                    tleg = self.session.get(TransportLegModel, leg_id)
+                    if tleg and tleg.estimated_arrival_at and tleg.planned_arrival_at:
+                        diff_sec = (tleg.estimated_arrival_at - tleg.planned_arrival_at).total_seconds()
+                        if diff_sec > 0:
+                            delay_days = max(1, int(round(diff_sec / 86400.0)))
+                            break
+
+            new_date = current_req + timedelta(days=delay_days)
 
             opt = ReplanOptionModel(
                 id=uuid.uuid4(),
                 replan_id=replan.id,
                 option_code=f"OPT-{option_idx:02d}",
-                title=f"Adjust Mission {mission.code} Operational Window (+7 Days)",
+                title=f"Adjust Mission {mission.code} Operational Window (+{delay_days} Days)",
                 description=(
                     f"Reschedule mission '{mission.title}' deadline from "
                     f"{current_req.strftime('%Y-%m-%d')} to {new_date.strftime('%Y-%m-%d')} "
@@ -365,7 +454,7 @@ class ReplanService:
                         "entity_type": "MISSION",
                         "entity_id": str(mission.id),
                         "field": "required_by_at",
-                        "current_value": current_req.isoformat(),
+                        "previous_value": current_req.isoformat(),
                         "proposed_value": new_date.isoformat(),
                     }
                 ],
@@ -377,15 +466,16 @@ class ReplanService:
                     "Expedition operational season time window remains open past new deadline",
                     "Assigned team personnel remain fit and in readiness state",
                 ],
-                expected_impact={"mission_delayed_days": 7, "field_safety": "PRESERVED"},
+                expected_impact={"mission_delayed_days": delay_days, "field_safety": "PRESERVED"},
                 feasibility_state=OptionFeasibility.FEASIBLE.value,
                 operational_rationale="Extending mission execution buffer restores readiness without cancelling scientific objectives.",
                 evidence={"mission_code": mission.code, "current_deadline": current_req.isoformat(), "adjusted_deadline": new_date.isoformat()},
-                assumptions=["Weather window permits field deployment 7 days post-nominal"],
+                assumptions=[f"Weather window permits field deployment {delay_days} days post-nominal"],
                 data_provenance="DERIVED",
             )
             candidate_options.append(opt)
             option_idx += 1
+
 
         # -------------------------------------------------------------
         # CANDIDATE 3: Asset Reassignment / Substitution (REASSIGN_ASSET)
@@ -730,21 +820,28 @@ class ApprovalService:
         approval.comment = request.comment
         approval.decided_at = now
 
+        replan = self.repo.get_replan_by_id(rec.replan_id)
         event_type = ""
         if decision_str in (ApprovalDecision.APPROVED.value, "APPROVED"):
             approval.status = ApprovalStatus.APPROVED.value
             rec.approval_state = "APPROVED"
             rec.status = RecommendationStatus.SELECTED.value
+            if replan:
+                replan.status = ReplanStatus.APPROVED.value
             event_type = "RecommendationApproved"
         else:
             approval.status = ApprovalStatus.REJECTED.value
             rec.approval_state = "REJECTED"
             rec.status = RecommendationStatus.REJECTED.value
+            if replan:
+                replan.status = ReplanStatus.REJECTED.value
             event_type = "RecommendationRejected"
 
         with self.session.begin_nested():
             self.repo.update_approval(approval)
             self.repo.update_recommendation(rec)
+            if replan:
+                self.repo.update_replan(replan)
 
             event = self.event_service.append_event(
                 event_type=event_type,
@@ -837,7 +934,21 @@ class ApprovalService:
                     mission_id = option.affected_entity_id
                     state_change = option.proposed_state_change or {}
                     new_date_str = state_change.get("required_by_at")
-                    new_date = datetime.fromisoformat(new_date_str) if new_date_str else now + timedelta(days=7)
+                    if not new_date_str and option.proposed_changes:
+                        for chg in option.proposed_changes:
+                            if isinstance(chg, dict) and chg.get("field") == "required_by_at":
+                                new_date_str = chg.get("proposed_value")
+                                break
+
+                    if not new_date_str:
+                        raise DomainValidationError(
+                            message=f"Reschedule option '{option.option_code}' missing explicit 'proposed_value' for 'required_by_at'.",
+                            field="proposed_changes",
+                        )
+                    new_date = datetime.fromisoformat(new_date_str)
+
+                    mission = self.session.get(MissionModel, mission_id)
+                    prev_val = mission.required_by_at.isoformat() if mission and mission.required_by_at else None
 
                     self.mission_service.update_mission(
                         mission_id=mission_id,
@@ -849,8 +960,10 @@ class ApprovalService:
                         "entity_type": "MISSION",
                         "entity_id": str(mission_id),
                         "action": "RESCHEDULE_MISSION",
+                        "previous_value": prev_val,
                         "new_required_by_at": new_date.isoformat(),
                     })
+
 
                 elif option.action_type == ReplanActionType.MODIFY_TRANSPORT.value:
                     leg_id = option.affected_entity_id
@@ -881,51 +994,52 @@ class ApprovalService:
                         "priority": 1,
                     })
 
-            # Update recommendation state
-            rec.status = RecommendationStatus.APPLIED.value
-            rec.approval_state = "IMPLEMENTED"
-            rec.updated_at = now
-            self.repo.update_recommendation(rec)
+            with self.session.begin_nested():
+                # Update recommendation state
+                rec.status = RecommendationStatus.APPLIED.value
+                rec.approval_state = "IMPLEMENTED"
+                rec.updated_at = now
+                self.repo.update_recommendation(rec)
 
-            # Update parent replan state
-            replan = self.repo.get_replan_by_id(rec.replan_id)
-            if replan:
-                replan.status = ReplanStatus.APPLIED.value
-                replan.completed_at = now
-                replan.updated_at = now
-                self.repo.update_replan(replan)
+                # Update parent replan state
+                replan = self.repo.get_replan_by_id(rec.replan_id)
+                if replan:
+                    replan.status = ReplanStatus.APPLIED.value
+                    replan.completed_at = now
+                    replan.updated_at = now
+                    self.repo.update_replan(replan)
 
-            # Emit immutable operational event
-            event = self.event_service.append_event(
-                event_type="ReplanApplied",
-                entity_type="REPLAN",
-                entity_id=rec.replan_id,
-                new_state=ReplanStatus.APPLIED.value,
-                previous_state=ReplanStatus.AWAITING_APPROVAL.value,
-                source=actor.get("source", "API"),
-                actor_type="OPERATOR",
-                actor_id=request.actor_person_id,
-                correlation_id=cid,
-                evidence={
-                    "recommendation_id": str(rec.id),
-                    "applied_changes": applied_changes,
-                    "comment": request.comment,
-                },
-            )
+                # Emit immutable operational event
+                event = self.event_service.append_event(
+                    event_type="ReplanApplied",
+                    entity_type="REPLAN",
+                    entity_id=rec.replan_id,
+                    new_state=ReplanStatus.APPLIED.value,
+                    previous_state=ReplanStatus.AWAITING_APPROVAL.value,
+                    source=actor.get("source", "API"),
+                    actor_type="OPERATOR",
+                    actor_id=request.actor_person_id,
+                    correlation_id=cid,
+                    evidence={
+                        "recommendation_id": str(rec.id),
+                        "applied_changes": applied_changes,
+                        "comment": request.comment,
+                    },
+                )
 
-            # Persist audit record
-            self.audit_service.record_audit(
-                action="REPLAN_APPLIED",
-                entity_type="RECOMMENDATION",
-                entity_id=rec.id,
-                after_snapshot={"status": rec.status, "approval_state": rec.approval_state},
-                correlation_id=cid,
-                actor_user_id=None,
-                actor_person_id=request.actor_person_id,
-                metadata={"comment": request.comment, "changes": applied_changes},
-            )
+                # Persist audit record
+                self.audit_service.record_audit(
+                    action="REPLAN_APPLIED",
+                    entity_type="RECOMMENDATION",
+                    entity_id=rec.id,
+                    after_snapshot={"status": rec.status, "approval_state": rec.approval_state},
+                    correlation_id=cid,
+                    actor_user_id=None,
+                    actor_person_id=request.actor_person_id,
+                    metadata={"comment": request.comment, "changes": applied_changes},
+                )
 
-            self.session.flush()
+            self.session.commit()
 
             return ReplanApplyResult(
                 recommendation_id=rec.id,
@@ -938,17 +1052,19 @@ class ApprovalService:
 
         except Exception as e:
             # Handle failure safely: record failure audit and mark FAILED
-            rec.status = RecommendationStatus.FAILED.value
-            self.session.flush()
+            with self.session.begin_nested():
+                rec.status = RecommendationStatus.FAILED.value
+                self.repo.update_recommendation(rec)
 
-            self.audit_service.record_audit(
-                action="REPLAN_APPLICATION_FAILED",
-                entity_type="RECOMMENDATION",
-                entity_id=rec.id,
-                after_snapshot={"status": rec.status},
-                correlation_id=cid,
-                actor_user_id=None,
-                actor_person_id=request.actor_person_id,
-                metadata={"error": str(e)},
-            )
+                self.audit_service.record_audit(
+                    action="REPLAN_APPLICATION_FAILED",
+                    entity_type="RECOMMENDATION",
+                    entity_id=rec.id,
+                    after_snapshot={"status": rec.status},
+                    correlation_id=cid,
+                    actor_user_id=None,
+                    actor_person_id=request.actor_person_id,
+                    metadata={"error": str(e)},
+                )
+            self.session.commit()
             raise e

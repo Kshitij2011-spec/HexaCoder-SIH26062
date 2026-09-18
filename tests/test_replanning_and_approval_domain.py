@@ -56,7 +56,7 @@ from backend.app.domains.expeditions.models import ExpeditionModel
 from backend.app.domains.missions.models import MissionModel
 from backend.app.domains.people.models import PersonModel
 from backend.app.domains.locations.models import LocationModel
-from backend.app.domains.transport.models import TransportLegModel
+from backend.app.domains.transport.models import TransportLegModel, TransportCargoAssignmentModel
 from backend.app.domains.cargo.models import CargoConsignmentModel, CargoPackageModel
 from backend.app.domains.assets.models import AssetModel
 from backend.app.services.dependencies.models import DependencyModel
@@ -244,6 +244,176 @@ def test_event_triggered_replan_requires_impact_and_violation(db_session, seeded
     with pytest.raises(DomainValidationError) as exc:
         service.create_replan_request(req)
     assert "EVENT_TRIGGERED replan requires meaningful state change" in str(exc.value)
+
+
+def test_genuine_event_triggered_replan_from_transport_delay(db_session):
+    """
+    Genuine Event-Triggered Replan Integration Test:
+    1. T-08 state changes to DELAYED through its domain operation (record_transport_delay).
+    2. OperationalEvent is emitted.
+    3. ImpactService finds affected cargo/package/asset/mission entities.
+    4. ConstraintService finds resulting constraint violation on cargo deadline.
+    5. ReplanService creates the replan directly from the event (create_replan_from_event).
+    6. No human approval happens automatically (zero approvals exist).
+    7. Generating options produces candidate options & proposed recommendations, but NO auto-approval.
+    """
+    from backend.app.domains.transport.service import TransportService
+    from backend.app.domains.transport.schemas import TransportLegDelayRequest
+    from backend.app.shared.types.states import TransportStatus
+
+    exp_id = uuid.uuid4()
+    loc_origin_id = uuid.uuid4()
+    loc_dest_id = uuid.uuid4()
+    t08_id = uuid.uuid4()
+    c117_id = uuid.uuid4()
+    pkg_id = uuid.uuid4()
+    i42_id = uuid.uuid4()
+    m08_id = uuid.uuid4()
+
+    exp = ExpeditionModel(id=exp_id, code="EXP-EVT-01", name="45th IAE Event Test", season="2026-2027")
+    loc_orig = LocationModel(id=loc_origin_id, code="LOC-CAPE", name="Cape Town Staging", type="STAGING")
+    loc_dest = LocationModel(id=loc_dest_id, code="LOC-MAITRI", name="Maitri Station", type="STATION")
+    db_session.add_all([exp, loc_orig, loc_dest])
+    db_session.flush()
+
+    now = datetime.now(timezone.utc)
+    cargo_deadline = now + timedelta(days=3)
+    planned_arr = now + timedelta(days=2)
+    severely_delayed_arr = now + timedelta(days=12)  # Exceeds cargo deadline by 9 days!
+
+    # Seed T-08 (READY)
+    t08 = TransportLegModel(
+        id=t08_id,
+        code="T-08-EVT",
+        expedition_id=exp_id,
+        mode="VESSEL",
+        origin_location_id=loc_origin_id,
+        destination_location_id=loc_dest_id,
+        status="READY",
+        planned_arrival_at=planned_arr,
+        estimated_arrival_at=planned_arr,
+    )
+
+    # Seed C-117
+    c117 = CargoConsignmentModel(
+        id=c117_id,
+        code="C-117-EVT",
+        expedition_id=exp_id,
+        origin_location_id=loc_origin_id,
+        destination_location_id=loc_dest_id,
+        status="APPROVED",
+        required_by_at=cargo_deadline,
+        estimated_arrival_at=planned_arr,
+    )
+
+    # Seed Cargo Assignment to Transport Leg
+    tc_assign = TransportCargoAssignmentModel(
+        id=uuid.uuid4(),
+        transport_leg_id=t08_id,
+        cargo_consignment_id=c117_id,
+    )
+
+    # Seed PKG-117-01
+    pkg = CargoPackageModel(id=pkg_id, code="PKG-117-EVT", consignment_id=c117_id)
+
+    # Seed I-42
+    i42 = AssetModel(id=i42_id, asset_code="I-42-EVT", name="High-Precision Gravimeter", type="INSTRUMENT", criticality="CRITICAL", status="AVAILABLE")
+
+    # Seed M-08
+    m08 = MissionModel(id=m08_id, expedition_id=exp_id, code="M-08-EVT", title="Ice Shelf Survey", type="SCIENTIFIC", status="APPROVED", required_by_at=cargo_deadline)
+
+    db_session.add_all([t08, c117, tc_assign, pkg, i42, m08])
+    db_session.flush()
+
+    # Wire semantic dependency chain:
+    # C-117 MOVES_VIA T-08
+    # C-117 CONTAINS PKG-117-01
+    # PKG-117-01 CONTAINS I-42
+    # M-08 REQUIRES I-42
+    deps = [
+        DependencyModel(id=uuid.uuid4(), relationship_type="MOVES_VIA", source_entity_type="CARGO_CONSIGNMENT", source_entity_id=c117_id, target_entity_type="TRANSPORT_LEG", target_entity_id=t08_id, criticality="CRITICAL"),
+        DependencyModel(id=uuid.uuid4(), relationship_type="CONTAINS", source_entity_type="CARGO_CONSIGNMENT", source_entity_id=c117_id, target_entity_type="CARGO_PACKAGE", target_entity_id=pkg_id, criticality="CRITICAL"),
+        DependencyModel(id=uuid.uuid4(), relationship_type="CONTAINS", source_entity_type="CARGO_PACKAGE", source_entity_id=pkg_id, target_entity_type="ASSET", target_entity_id=i42_id, criticality="CRITICAL"),
+        DependencyModel(id=uuid.uuid4(), relationship_type="REQUIRES", source_entity_type="MISSION", source_entity_id=m08_id, target_entity_type="ASSET", target_entity_id=i42_id, criticality="CRITICAL"),
+    ]
+    db_session.add_all(deps)
+
+    # Attach hard constraint on C-117 arrival deadline
+    constraint = ConstraintModel(
+        id=uuid.uuid4(),
+        code="C-CARGO-DEADLINE-EVT",
+        name="Consignment Arrival Deadline Check",
+        type="TEMPORAL",
+        rule_code="CARGO_ETA_DEADLINE",
+        subject_type="CARGO_CONSIGNMENT",
+        subject_id=c117_id,
+        hard_or_soft="HARD",
+        severity="CRITICAL",
+        active=True,
+    )
+
+    db_session.add(constraint)
+    db_session.flush()
+
+    # STEP 1: Execute domain operation to delay T-08
+    transport_service = TransportService(db_session)
+    updated_leg, affected_cargos = transport_service.record_transport_delay(
+        leg_id=t08_id,
+        delay_data=TransportLegDelayRequest(
+            new_estimated_arrival_at=severely_delayed_arr,
+            delay_reason="Severe sea ice pack encrustation halting vessel progress",
+        ),
+    )
+    assert updated_leg.status == TransportStatus.DELAYED.value
+
+    # STEP 2: Verify OperationalEvent was emitted
+    event = db_session.execute(
+        select(OperationalEventModel).where(
+            OperationalEventModel.entity_id == t08_id,
+            OperationalEventModel.event_type == "TransportLegDelayed",
+        )
+    ).scalar_one_or_none()
+    assert event is not None
+    assert event.new_state == TransportStatus.DELAYED.value
+
+    # STEP 3 & 4: Trigger replan directly from the OperationalEvent
+    replan_service = ReplanService(db_session)
+    replan = replan_service.create_replan_from_event(event.event_id)
+
+    # STEP 5: Verify Replan properties
+    assert replan.status == ReplanStatus.REQUESTED.value
+    assert replan.trigger_event_id == event.event_id
+    assert replan.trigger_entity_type == "TRANSPORT_LEG"
+    assert replan.trigger_entity_id == t08_id
+    assert len(replan.affected_entities) >= 4
+    assert len(replan.violated_constraints) >= 1
+
+    # STEP 6: Verify NO human approval happened automatically
+    approvals = db_session.execute(
+        select(ApprovalModel).where(ApprovalModel.recommendation_id.in_(
+            select(RecommendationModel.id).where(RecommendationModel.replan_id == replan.id)
+        ))
+    ).scalars().all()
+    assert len(approvals) == 0
+
+    # Authoritative mission deadline remains UNCHANGED
+    db_session.refresh(m08)
+    assert _normalize_dt(m08.required_by_at) == _normalize_dt(cargo_deadline)
+
+    # Generate options and verify candidates remain advisory (PROPOSED) without auto-approval
+    options, recs = replan_service.generate_options(replan.id)
+    assert len(options) >= 1
+    assert len(recs) >= 1
+    for rec in recs:
+        assert rec.status == RecommendationStatus.PROPOSED.value
+        assert rec.approval_state == "PROPOSED"
+
+    # Approvals are still strictly zero until explicitly requested
+    approvals_after = db_session.execute(
+        select(ApprovalModel).where(ApprovalModel.recommendation_id.in_([r.id for r in recs]))
+    ).scalars().all()
+    assert len(approvals_after) == 0
+
 
 
 # ============================================================
@@ -528,20 +698,36 @@ def test_duplicate_application_is_idempotent(db_session, seeded_baseline):
     res1 = approval_service.apply(rec.id, ReplanApplyRequest(actor_person_id=person.id))
     assert res1.status == "APPLIED"
 
+    db_session.refresh(mission)
+    mission_deadline_after_first = mission.required_by_at
+
     event_count_before = len(list(db_session.execute(
         select(OperationalEventModel).where(OperationalEventModel.event_type == "ReplanApplied")
+    ).scalars().all()))
+    audit_count_before = len(list(db_session.execute(
+        select(AuditLogModel).where(AuditLogModel.action == "REPLAN_APPLIED")
     ).scalars().all()))
 
     # Second apply (idempotent no-op)
     res2 = approval_service.apply(rec.id, ReplanApplyRequest(actor_person_id=person.id))
     assert res2.status == "APPLIED"
     assert "already been applied" in res2.message
+    assert res2.recommendation_id == res1.recommendation_id
+
+    # Zero additional domain mutation
+    db_session.refresh(mission)
+    assert mission.required_by_at == mission_deadline_after_first
 
     event_count_after = len(list(db_session.execute(
         select(OperationalEventModel).where(OperationalEventModel.event_type == "ReplanApplied")
     ).scalars().all()))
-    # Zero duplicate events
+    audit_count_after = len(list(db_session.execute(
+        select(AuditLogModel).where(AuditLogModel.action == "REPLAN_APPLIED")
+    ).scalars().all()))
+
+    # Zero duplicate events and audit records
     assert event_count_before == event_count_after
+    assert audit_count_before == audit_count_after
 
 
 # ============================================================
