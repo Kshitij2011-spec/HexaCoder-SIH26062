@@ -1,0 +1,68 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.12.0/schemas/plan.schema.json",
+  "projectId": "prj_polarops_track_b",
+  "type": "frontend",
+  "name": "Incident Response workspace declaration, lifecycle state machine, cross-domain references, and timeline",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to /incidents on the PolarOps frontend"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify Incident Response workspace header 'Incident Response - Polar station alarms, field anomalies, hazard containment, and operational triage' is visible"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify search input, severity filter pills (ALL, LOW, MEDIUM, HIGH, CRITICAL), status selector, and 'Declare Incident' button are present"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify operational incident table renders incident codes, titles, severity badges, priority numbers, and statuses"
+    },
+    {
+      "type": "action",
+      "description": "Click 'Declare Incident' button to open the CreateIncidentWorkflow modal"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify declaration modal contains fields for code, title, description, severity, priority, type, location, and reporter"
+    },
+    {
+      "type": "action",
+      "description": "Fill required fields and submit declaration modal"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify newly declared incident appears in the incident table"
+    },
+    {
+      "type": "action",
+      "description": "Click on an incident code chip or row to open the IncidentDetailPanel drawer"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify drawer displays incident overview with high-visibility severity badge, priority, location, and detected timestamp"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify valid lifecycle action buttons reflect state machine (e.g. Acknowledge, Start Mitigation, Resolve, Close)"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify terminal CLOSED state disables state transitions and displays terminal closure notice"
+    },
+    {
+      "type": "action",
+      "description": "In Cross-Domain References section, select reference type (ASSET, LOCATION, INVENTORY_STOCK_LOT, CARGO_CONSIGNMENT, TRANSPORT_LEG), enter reference ID and notes, and click Attach Reference"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify attached reference appears in references list with timestamp and provenance tag"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify operational timeline displays chronological lifecycle transitions and event context"
+    }
+  ]
+}

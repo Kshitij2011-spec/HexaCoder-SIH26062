@@ -65,3 +65,10 @@ desktop.ini
 # Supabase
 supabase/.temp/
 .supabase/
+
+# Local Dev & Test Artifacts
+.playwright-mcp/
+*.db
+*.db-journal
+*.png
+
