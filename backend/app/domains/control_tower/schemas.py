@@ -223,7 +223,7 @@ class ConsequentialActionItem(BaseModel):
 class ScenarioInjectRequest(BaseModel):
     """Payload for triggering a deterministic benchmark disruption scenario."""
     scenario_key: str = Field(..., description="Approved benchmark scenario key: FLIGHT_GROUNDING, GENERATOR_FAILURE, COLD_CHAIN_EXCURSION")
-    expedition_id: Optional[uuid.UUID] = Field(None, description="Target expedition. If omitted, defaults to active seed expedition.")
+    expedition_id: uuid.UUID = Field(..., description="Target expedition ID. Strictly required for tenant isolation.")
     requested_by: Optional[uuid.UUID] = Field(None, description="Operator person ID triggering the disruption.")
 
 

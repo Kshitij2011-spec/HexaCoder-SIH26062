@@ -52,6 +52,8 @@ from backend.app.domains.locations.models import LocationModel
 from backend.app.domains.transport.models import TransportLegModel
 from backend.app.domains.cargo.models import CargoConsignmentModel
 from backend.app.domains.assets.models import AssetModel
+from backend.app.platform.audit.models import AuditLogModel
+from backend.app.platform.events.models import OperationalEventModel
 from backend.app.domains.replanning.models import (
     ReplanModel,
     ReplanOptionModel,
@@ -176,6 +178,7 @@ def clean_db(shared_engine, SessionFactory):
         condition="OPERATIONAL",
         criticality="LIFE_SUPPORT",
         location_id=loc_id,
+        assigned_mission_id=mission_id,
         data_provenance="SYNTHETIC_DEMO",
     )
     session.add(generator)
@@ -426,41 +429,366 @@ def test_scenario_inject_cold_chain_excursion_dynamic(SessionFactory, clean_db):
     session.close()
 
 
-def test_scenario_zero_target_error_handling(SessionFactory):
-    """
-    Validates that injecting into an empty expedition raises a clean DomainValidationError
-    without mutating unrelated entities.
-    """
+def test_flight_grounding_rejects_expedition_with_no_air_leg(SessionFactory):
+    """Proves Scenario 1 rejects an expedition that has no AIR transport leg."""
     session = SessionFactory()
-    empty_exp_id = uuid.uuid4()
+    exp_id = uuid.uuid4()
     exp = ExpeditionModel(
-        id=empty_exp_id,
-        code=f"EXP-EMPTY-{uuid.uuid4().hex[:6]}",
-        name="Empty Expedition",
+        id=exp_id,
+        code=f"EXP-NOAIR-{uuid.uuid4().hex[:6]}",
+        name="No Air Expedition",
         season="2025-2026",
-        planned_start_at=datetime(2025, 11, 1, tzinfo=timezone.utc),
-        planned_end_at=datetime(2026, 4, 1, tzinfo=timezone.utc),
-        status="PLANNING",
+        status="ACTIVE",
         data_provenance="SYNTHETIC_DEMO",
     )
     session.add(exp)
     session.commit()
 
     scenario_svc = ScenarioInjectionService(session)
-
     try:
         with pytest.raises(DomainValidationError) as exc:
             scenario_svc.inject(
                 ScenarioInjectRequest(
                     scenario_key="FLIGHT_GROUNDING",
-                    expedition_id=empty_exp_id,
+                    expedition_id=exp_id,
                 )
             )
-        assert "No active transport legs found" in str(exc.value)
+        assert "No active AIR transport legs found" in str(exc.value)
     finally:
         session.delete(exp)
         session.commit()
         session.close()
+
+
+def test_flight_grounding_never_falls_back_to_vessel_or_other_transport(SessionFactory):
+    """Proves Scenario 1 never falls back from missing AIR leg to an existing VESSEL leg."""
+    session = SessionFactory()
+    exp_id = uuid.uuid4()
+    loc_id = uuid.uuid4()
+    leg_id = uuid.uuid4()
+
+    exp = ExpeditionModel(
+        id=exp_id,
+        code=f"EXP-VESSEL-{uuid.uuid4().hex[:6]}",
+        name="Vessel Expedition",
+        season="2025-2026",
+        status="ACTIVE",
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    loc = LocationModel(
+        id=loc_id,
+        code=f"LOC-VESSEL-{uuid.uuid4().hex[:6]}",
+        name="Vessel Harbor",
+        type="PORT",
+        status="AVAILABLE",
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    leg = TransportLegModel(
+        id=leg_id,
+        code=f"LEG-VESSEL-{uuid.uuid4().hex[:6]}",
+        expedition_id=exp_id,
+        mode="VESSEL",
+        status="READY",
+        origin_location_id=loc_id,
+        destination_location_id=loc_id,
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    session.add_all([exp, loc, leg])
+    session.commit()
+
+    scenario_svc = ScenarioInjectionService(session)
+    try:
+        with pytest.raises(DomainValidationError) as exc:
+            scenario_svc.inject(
+                ScenarioInjectRequest(
+                    scenario_key="FLIGHT_GROUNDING",
+                    expedition_id=exp_id,
+                )
+            )
+        assert "No active AIR transport legs found" in str(exc.value)
+
+        # Invariant: Vessel transport leg must remain completely UNTOUCHED
+        persisted_leg = session.get(TransportLegModel, leg_id)
+        assert persisted_leg.status == "READY", "VESSEL leg must not be delayed by FLIGHT_GROUNDING"
+        assert persisted_leg.delay_reason is None
+    finally:
+        session.delete(leg)
+        session.delete(loc)
+        session.delete(exp)
+        session.commit()
+        session.close()
+
+
+def test_generator_failure_rejects_expedition_with_no_generator(SessionFactory):
+    """Proves Scenario 2 rejects an expedition that has no associated generator/power assets."""
+    session = SessionFactory()
+    exp_id = uuid.uuid4()
+    loc_id = uuid.uuid4()
+    vehicle_id = uuid.uuid4()
+
+    exp = ExpeditionModel(
+        id=exp_id,
+        code=f"EXP-NO-GEN-{uuid.uuid4().hex[:6]}",
+        name="No Generator Expedition",
+        season="2025-2026",
+        status="ACTIVE",
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    loc = LocationModel(
+        id=loc_id,
+        code=f"LOC-NG-{uuid.uuid4().hex[:6]}",
+        name="Field Depot",
+        type="STATION",
+        status="AVAILABLE",
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    vehicle = AssetModel(
+        id=vehicle_id,
+        asset_code=f"AST-VEH-{uuid.uuid4().hex[:6]}",
+        name="Snowcat Vehicle",
+        type="VEHICLE",
+        status="AVAILABLE",
+        condition="OPERATIONAL",
+        criticality="STANDARD",
+        location_id=loc_id,
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    session.add_all([exp, loc, vehicle])
+    session.commit()
+
+    scenario_svc = ScenarioInjectionService(session)
+    try:
+        with pytest.raises(DomainValidationError) as exc:
+            scenario_svc.inject(
+                ScenarioInjectRequest(
+                    scenario_key="GENERATOR_FAILURE",
+                    expedition_id=exp_id,
+                )
+            )
+        assert "No active generator/power assets found" in str(exc.value)
+
+        # Invariant: Vehicle asset must remain completely UNTOUCHED
+        persisted_veh = session.get(AssetModel, vehicle_id)
+        assert persisted_veh.status == "AVAILABLE"
+        assert persisted_veh.condition == "OPERATIONAL"
+    finally:
+        session.delete(vehicle)
+        session.delete(loc)
+        session.delete(exp)
+        session.commit()
+        session.close()
+
+
+def test_generator_failure_never_mutates_unrelated_global_asset(SessionFactory, clean_db):
+    """
+    Proves Scenario 2 rejects an empty expedition and never mutates an unrelated global/other-expedition generator.
+    """
+    session = SessionFactory()
+    unrelated_exp_id = uuid.uuid4()
+    exp_unrelated = ExpeditionModel(
+        id=unrelated_exp_id,
+        code=f"EXP-OTHER-{uuid.uuid4().hex[:6]}",
+        name="Unrelated Expedition",
+        season="2025-2026",
+        status="ACTIVE",
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    session.add(exp_unrelated)
+    session.commit()
+
+    scenario_svc = ScenarioInjectionService(session)
+    try:
+        with pytest.raises(DomainValidationError) as exc:
+            scenario_svc.inject(
+                ScenarioInjectRequest(
+                    scenario_key="GENERATOR_FAILURE",
+                    expedition_id=unrelated_exp_id,
+                )
+            )
+        assert "No active generator/power assets found associated with expedition" in str(exc.value)
+
+        # Invariant: The generator belonging to clean_db must remain completely UNTOUCHED
+        generator = session.get(AssetModel, clean_db["asset_id"])
+        assert generator.status == "AVAILABLE", "Unrelated generator must not be mutated"
+        assert generator.condition == "OPERATIONAL"
+    finally:
+        session.delete(exp_unrelated)
+        session.commit()
+        session.close()
+
+
+def test_cold_chain_excursion_rejects_expedition_with_no_cold_chain_cargo(SessionFactory):
+    """Proves Scenario 3 rejects an expedition that has no cold-chain cargo."""
+    session = SessionFactory()
+    exp_id = uuid.uuid4()
+    exp = ExpeditionModel(
+        id=exp_id,
+        code=f"EXP-NOCOLD-{uuid.uuid4().hex[:6]}",
+        name="No Cold Cargo Expedition",
+        season="2025-2026",
+        status="ACTIVE",
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    session.add(exp)
+    session.commit()
+
+    scenario_svc = ScenarioInjectionService(session)
+    try:
+        with pytest.raises(DomainValidationError) as exc:
+            scenario_svc.inject(
+                ScenarioInjectRequest(
+                    scenario_key="COLD_CHAIN_EXCURSION",
+                    expedition_id=exp_id,
+                )
+            )
+        assert "No active cold-chain" in str(exc.value)
+    finally:
+        session.delete(exp)
+        session.commit()
+        session.close()
+
+
+def test_cold_chain_excursion_never_moves_ordinary_cargo_to_held(SessionFactory):
+    """Proves Scenario 3 never falls back from cold-chain to ordinary cargo."""
+    session = SessionFactory()
+    exp_id = uuid.uuid4()
+    loc_id = uuid.uuid4()
+    cargo_id = uuid.uuid4()
+
+    exp = ExpeditionModel(
+        id=exp_id,
+        code=f"EXP-DRY-{uuid.uuid4().hex[:6]}",
+        name="Dry Cargo Expedition",
+        season="2025-2026",
+        status="ACTIVE",
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    loc = LocationModel(
+        id=loc_id,
+        code=f"LOC-DRY-{uuid.uuid4().hex[:6]}",
+        name="Dry Depot",
+        type="STATION",
+        status="AVAILABLE",
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    ordinary_cargo = CargoConsignmentModel(
+        id=cargo_id,
+        code=f"CRG-DRY-{uuid.uuid4().hex[:6]}",
+        expedition_id=exp_id,
+        origin_location_id=loc_id,
+        destination_location_id=loc_id,
+        status="READY",
+        handling_classification="GENERAL_SUPPLIES",
+        risk_level="NOMINAL",
+        required_by_at=datetime.now(timezone.utc) + timedelta(days=5),
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    session.add_all([exp, loc, ordinary_cargo])
+    session.commit()
+
+    scenario_svc = ScenarioInjectionService(session)
+    try:
+        with pytest.raises(DomainValidationError) as exc:
+            scenario_svc.inject(
+                ScenarioInjectRequest(
+                    scenario_key="COLD_CHAIN_EXCURSION",
+                    expedition_id=exp_id,
+                )
+            )
+        assert "No active cold-chain" in str(exc.value)
+
+        # Invariant: Ordinary cargo must NOT be moved to HELD
+        persisted_cargo = session.get(CargoConsignmentModel, cargo_id)
+        assert persisted_cargo.status == "READY", "Ordinary cargo must not be moved to HELD"
+        assert persisted_cargo.exception_reason is None
+    finally:
+        session.delete(ordinary_cargo)
+        session.delete(loc)
+        session.delete(exp)
+        session.commit()
+        session.close()
+
+
+def test_scenario_request_without_expedition_id_rejected(SessionFactory, clean_db):
+    """Proves ScenarioInjectRequest strictly requires expedition_id without global fallback."""
+    session = SessionFactory()
+    scenario_svc = ScenarioInjectionService(session)
+
+    # Service-level validation
+    with pytest.raises(DomainValidationError) as exc:
+        scenario_svc.inject(
+            ScenarioInjectRequest.model_construct(
+                scenario_key="FLIGHT_GROUNDING",
+                expedition_id=None,
+            )
+        )
+    assert "expedition_id is strictly required" in str(exc.value)
+
+    # API-level schema validation (FastAPI rejects payload missing required field with 422)
+    def override_get_db():
+        try:
+            yield session
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/control-tower/scenarios/inject",
+        json={"scenario_key": "FLIGHT_GROUNDING"},
+    )
+    app.dependency_overrides.clear()
+    assert response.status_code == 422, "Missing expedition_id must fail schema validation with HTTP 422"
+    session.close()
+
+
+def test_generator_failure_uses_only_public_asset_service(SessionFactory, clean_db):
+    """
+    Proves Scenario 2 uses only public AssetService APIs:
+    - Verifies condition DAMAGED is updated via update_asset
+    - Verifies status MAINTENANCE is transitioned via transition_asset_status
+    - Verifies AuditLogModel entries are recorded for both actions
+    - Verifies OperationalEventModel entry AssetStatusChanged is emitted
+    """
+    session = SessionFactory()
+    scenario_svc = ScenarioInjectionService(session)
+
+    res = scenario_svc.inject(
+        ScenarioInjectRequest(
+            scenario_key="GENERATOR_FAILURE",
+            expedition_id=clean_db["expedition_id"],
+            requested_by=uuid.uuid4(),
+        )
+    )
+    assert res.scenario_key == "GENERATOR_FAILURE"
+    assert res.affected_entity_id == clean_db["asset_id"]
+
+    # Verify asset state
+    asset = session.get(AssetModel, clean_db["asset_id"])
+    assert asset.status == "MAINTENANCE"
+    assert asset.condition == "DAMAGED"
+
+    # Verify audit logs recorded by AssetService
+    audit_records = session.execute(
+        select(AuditLogModel).where(
+            AuditLogModel.entity_type == "ASSET",
+            AuditLogModel.entity_id == clean_db["asset_id"],
+        )
+    ).scalars().all()
+    actions = [a.action for a in audit_records]
+    assert "UPDATE_ASSET" in actions, "AssetService.update_asset must record UPDATE_ASSET audit"
+    assert "TRANSITION_ASSET_STATUS" in actions, "AssetService.transition_asset_status must record TRANSITION_ASSET_STATUS audit"
+
+    # Verify operational event emitted by AssetService
+    events = session.execute(
+        select(OperationalEventModel).where(
+            OperationalEventModel.entity_type == "ASSET",
+            OperationalEventModel.entity_id == clean_db["asset_id"],
+        )
+    ).scalars().all()
+    event_types = [e.event_type for e in events]
+    assert "AssetStatusChanged" in event_types, "AssetService.transition_asset_status must append AssetStatusChanged event"
+    session.close()
 
 
 def test_scenario_repeat_idempotency(SessionFactory, clean_db):

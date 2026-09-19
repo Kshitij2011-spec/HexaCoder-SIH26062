@@ -6,13 +6,14 @@ Provides repeatable, auditable disruption injection for the three approved A6 be
 2. GENERATOR_FAILURE: Critical mechanical failure of expedition primary diesel generator.
 3. COLD_CHAIN_EXCURSION: Refrigerated cargo hold/quarantine due to storage temperature excursion.
 
-Guarantees:
+Guarantees & Constitutional Invariants:
 - Pure public service invocations (TransportService, AssetService, CargoService); zero Track B internal modifications.
-- Dynamic entity resolution scoped to expedition; zero hardcoded entity IDs.
-- Deterministic documented selection rules when multiple matching candidates exist.
-- Explicit validation error when zero matching targets exist.
+- Dynamic entity resolution strictly scoped to expedition; zero hardcoded entity IDs.
+- Deterministic documented selection rules when matching candidates exist.
+- Strict DomainValidationError when zero semantic matching targets exist (zero unsafe fallbacks).
+- Strict expedition isolation: expedition_id is mandatory; never falls back to global/unrelated entities.
 - Safe idempotency on repeated injection.
-- Zero autonomous replanning or recommendation generation.
+- Strict non-autonomous rule: zero autonomous replanning or recommendation generation.
 - All events and mutations tagged with data_provenance: SYNTHETIC_DEMO.
 """
 
@@ -27,35 +28,34 @@ from backend.app.domains.control_tower.schemas import (
     ScenarioInjectResult,
 )
 from backend.app.domains.expeditions.models import ExpeditionModel
+from backend.app.domains.missions.models import MissionModel
+from backend.app.services.dependencies.models import DependencyModel
 from backend.app.domains.transport.models import TransportLegModel
 from backend.app.domains.transport.service import TransportService
-from backend.app.domains.transport.schemas import TransportLegDelayRequest
+from backend.app.domains.transport.schemas import TransportLegDelayRequest, TransportLegUpdate
 from backend.app.domains.assets.models import AssetModel
 from backend.app.domains.assets.service import AssetService
-from backend.app.domains.assets.schemas import AssetStatusTransitionRequest
-from backend.app.domains.assets.states import AssetStatus
+from backend.app.domains.assets.schemas import AssetStatusTransitionRequest, AssetUpdate
+from backend.app.domains.assets.states import AssetStatus, AssetCondition
 from backend.app.domains.cargo.models import CargoConsignmentModel
 from backend.app.domains.cargo.service import CargoService
 from backend.app.domains.cargo.schemas import CargoConsignmentUpdate
-from backend.app.shared.types.states import CargoStatus
+from backend.app.shared.types.states import CargoStatus, TransportStatus
 from backend.app.platform.events.models import OperationalEventModel
 from backend.app.core.errors import DomainValidationError
 
 
 def _resolve_expedition_id(session: Session, requested_exp_id: Optional[uuid.UUID]) -> uuid.UUID:
-    """Resolves target expedition: uses provided ID or falls back to the earliest active expedition."""
-    if requested_exp_id:
-        exp = session.get(ExpeditionModel, requested_exp_id)
-        if not exp:
-            raise DomainValidationError(f"Target expedition '{requested_exp_id}' not found.")
-        return exp.id
-
-    first_exp = session.execute(
-        select(ExpeditionModel.id).order_by(ExpeditionModel.created_at.asc()).limit(1)
-    ).scalar_one_or_none()
-    if not first_exp:
-        raise DomainValidationError("No expeditions found in database to inject disruption scenario into.")
-    return first_exp
+    """Validates target expedition: expedition_id is strictly required for tenant isolation."""
+    if not requested_exp_id:
+        raise DomainValidationError(
+            message="expedition_id is strictly required for scenario injection. Global or fallback injection is prohibited.",
+            field="expedition_id",
+        )
+    exp = session.get(ExpeditionModel, requested_exp_id)
+    if not exp:
+        raise DomainValidationError(f"Target expedition '{requested_exp_id}' not found.")
+    return exp.id
 
 
 def _get_latest_event_id(session: Session, entity_type: str, entity_id: uuid.UUID) -> Optional[uuid.UUID]:
@@ -103,49 +103,33 @@ class ScenarioInjectionService:
         """
         Scenario 1: FLIGHT_GROUNDING.
         Dynamically locates active air transport leg in expedition and delays it +5 days.
-        Deterministic selection rule: mode == AIR (or air/flight naming), status in active states,
+        Deterministic selection rule: mode == AIR, status in active states,
         sorted by planned_departure_at ASC, code ASC.
+        Zero fallback to non-AIR transport legs.
         """
-        active_statuses = ["BOOKED", "READY", "DEPARTED", "IN_TRANSIT"]
+        active_statuses = ["PLANNED", "BOOKED", "READY", "DEPARTED", "IN_TRANSIT"]
 
-        # 1. Look for air transport legs
         stmt_air = (
             select(TransportLegModel)
             .where(
                 TransportLegModel.expedition_id == expedition_id,
                 TransportLegModel.status.in_(active_statuses),
-                or_(
-                    TransportLegModel.mode == "AIR",
-                    TransportLegModel.code.ilike("%air%"),
-                    TransportLegModel.code.ilike("%t-02%"),
-                ),
+                TransportLegModel.mode == "AIR",
             )
             .order_by(TransportLegModel.planned_departure_at.asc(), TransportLegModel.code.asc())
             .limit(1)
         )
         leg = self.session.execute(stmt_air).scalar_one_or_none()
 
-        # Fallback to any active transport leg if no explicit air leg exists
-        if not leg:
-            stmt_any = (
-                select(TransportLegModel)
-                .where(
-                    TransportLegModel.expedition_id == expedition_id,
-                    TransportLegModel.status.in_(active_statuses),
-                )
-                .order_by(TransportLegModel.planned_departure_at.asc(), TransportLegModel.code.asc())
-                .limit(1)
-            )
-            leg = self.session.execute(stmt_any).scalar_one_or_none()
-
         delay_reason = "Adverse polar weather: flight grounded due to severe blizzard and zero visibility."
 
         if not leg:
-            # Check for already-grounded leg for idempotency replay
+            # Check for already-grounded AIR leg for idempotency replay
             stmt_already = (
                 select(TransportLegModel)
                 .where(
                     TransportLegModel.expedition_id == expedition_id,
+                    TransportLegModel.mode == "AIR",
                     TransportLegModel.status == "DELAYED",
                     TransportLegModel.delay_reason == delay_reason,
                 )
@@ -165,7 +149,7 @@ class ScenarioInjectionService:
                     data_provenance="SYNTHETIC_DEMO",
                 )
             raise DomainValidationError(
-                f"FLIGHT_GROUNDING scenario failed: No active transport legs found for expedition {expedition_id}."
+                f"FLIGHT_GROUNDING scenario failed: No active AIR transport legs found for expedition {expedition_id}."
             )
 
         if leg.status == "DELAYED" and leg.delay_reason == delay_reason:
@@ -198,6 +182,13 @@ class ScenarioInjectionService:
             "source": "SCENARIO_RUNNER",
         }
 
+        if leg.status == "PLANNED":
+            self.transport_service.update_transport_leg(
+                leg_id=leg.id,
+                data=TransportLegUpdate(status=TransportStatus.BOOKED),
+                actor_context=actor_context,
+            )
+
         self.transport_service.record_transport_delay(
             leg_id=leg.id,
             delay_data=delay_req,
@@ -224,46 +215,72 @@ class ScenarioInjectionService:
     ) -> ScenarioInjectResult:
         """
         Scenario 2: GENERATOR_FAILURE.
-        Dynamically locates an active power/generator asset and transitions it to MAINTENANCE with DAMAGED condition.
-        Deterministic selection rule: type or name matches generator/power, status in AVAILABLE/IN_USE,
-        sorted by criticality DESC, asset_code ASC.
+        Dynamically locates an active power/generator asset legitimately associated with the expedition
+        and transitions it via public AssetService contracts.
+        Deterministic selection rule:
+          - legitimately associated with expedition_id via assigned mission, mission location, or semantic dependency.
+          - type or name matches generator/power.
+          - status in AVAILABLE or IN_USE.
+          - sorted by criticality DESC, asset_code ASC.
+        Zero fallback to unrelated global assets or non-generator assets.
+        Zero direct mutations on AssetModel from Track A.
         """
         active_statuses = [AssetStatus.AVAILABLE.value, AssetStatus.IN_USE.value]
+
+        # Resolve legitimate domain associations with the expedition
+        exp_missions_subq = select(MissionModel.id).where(MissionModel.expedition_id == expedition_id)
+        exp_mission_locs_subq = select(MissionModel.location_id).where(
+            MissionModel.expedition_id == expedition_id,
+            MissionModel.location_id.isnot(None),
+        )
+        exp_dep_targets_subq = select(DependencyModel.target_entity_id).where(
+            DependencyModel.expedition_id == expedition_id,
+            DependencyModel.target_entity_type == "ASSET",
+        )
+        exp_dep_sources_subq = select(DependencyModel.source_entity_id).where(
+            DependencyModel.expedition_id == expedition_id,
+            DependencyModel.source_entity_type == "ASSET",
+        )
+
+        expedition_asset_clause = or_(
+            AssetModel.assigned_mission_id.in_(exp_missions_subq),
+            AssetModel.location_id.in_(exp_mission_locs_subq),
+            AssetModel.id.in_(exp_dep_targets_subq),
+            AssetModel.id.in_(exp_dep_sources_subq),
+        )
+
+        generator_semantic_clause = or_(
+            AssetModel.type.ilike("%generator%"),
+            AssetModel.type.ilike("%power%"),
+            AssetModel.name.ilike("%generator%"),
+        )
 
         stmt = (
             select(AssetModel)
             .where(
                 AssetModel.status.in_(active_statuses),
-                or_(
-                    AssetModel.type.ilike("%generator%"),
-                    AssetModel.type.ilike("%power%"),
-                    AssetModel.name.ilike("%generator%"),
-                ),
+                generator_semantic_clause,
+                expedition_asset_clause,
             )
             .order_by(AssetModel.criticality.desc(), AssetModel.asset_code.asc())
             .limit(1)
         )
         asset = self.session.execute(stmt).scalar_one_or_none()
 
-        # Fallback: any available asset if no generator specifically labeled
-        if not asset:
-            stmt_fallback = (
-                select(AssetModel)
-                .where(AssetModel.status.in_(active_statuses))
-                .order_by(AssetModel.criticality.desc(), AssetModel.asset_code.asc())
-                .limit(1)
-            )
-            asset = self.session.execute(stmt_fallback).scalar_one_or_none()
-
         reason = "Primary station diesel generator catastrophic mechanical failure: engine block seizure and coolant loss."
 
         if not asset:
-            # Check for already-failed asset for idempotency replay
+            # Check for already-failed generator associated with this expedition for idempotency replay
             stmt_already = (
                 select(AssetModel)
                 .where(
                     AssetModel.status == AssetStatus.MAINTENANCE.value,
-                    AssetModel.condition == "DAMAGED",
+                    or_(
+                        AssetModel.condition == AssetCondition.DAMAGED.value,
+                        AssetModel.condition == AssetCondition.DEGRADED.value,
+                    ),
+                    generator_semantic_clause,
+                    expedition_asset_clause,
                 )
                 .order_by(AssetModel.criticality.desc(), AssetModel.asset_code.asc())
                 .limit(1)
@@ -281,10 +298,10 @@ class ScenarioInjectionService:
                     data_provenance="SYNTHETIC_DEMO",
                 )
             raise DomainValidationError(
-                f"GENERATOR_FAILURE scenario failed: No operational assets found in database."
+                f"GENERATOR_FAILURE scenario failed: No active generator/power assets found associated with expedition {expedition_id}."
             )
 
-        if asset.status == AssetStatus.MAINTENANCE.value and asset.condition == "DAMAGED":
+        if asset.status == AssetStatus.MAINTENANCE.value and asset.condition == AssetCondition.DAMAGED.value:
             event_id = _get_latest_event_id(self.session, "ASSET", asset.id)
             return ScenarioInjectResult(
                 scenario_key="GENERATOR_FAILURE",
@@ -296,7 +313,21 @@ class ScenarioInjectionService:
                 data_provenance="SYNTHETIC_DEMO",
             )
 
-        # Transition status to MAINTENANCE via public contract
+        # 1. Update condition to DAMAGED via public AssetService.update_asset contract
+        self.asset_service.update_asset(
+            asset_id=asset.id,
+            data=AssetUpdate(
+                condition=AssetCondition.DAMAGED,
+                operational_metadata={
+                    "disruption": "GENERATOR_FAILURE",
+                    "fault": "Catastrophic engine block seizure and coolant loss",
+                    "provenance": "SYNTHETIC_DEMO",
+                },
+            ),
+            actor_person_id=requested_by,
+        )
+
+        # 2. Transition status to MAINTENANCE via public AssetService.transition_asset_status contract
         self.asset_service.transition_asset_status(
             asset_id=asset.id,
             req=AssetStatusTransitionRequest(
@@ -305,11 +336,6 @@ class ScenarioInjectionService:
             ),
             actor_person_id=requested_by,
         )
-
-        # Also mark condition as DAMAGED so readiness immediately flags it as a hard blocker
-        asset.condition = "DAMAGED"
-        self.session.add(asset)
-        self.session.commit()
 
         event_id = _get_latest_event_id(self.session, "ASSET", asset.id)
 
@@ -331,9 +357,10 @@ class ScenarioInjectionService:
     ) -> ScenarioInjectResult:
         """
         Scenario 3: COLD_CHAIN_EXCURSION.
-        Dynamically locates active temperature-sensitive cargo and transitions it to HELD (quarantine).
+        Dynamically locates active temperature-sensitive cargo in expedition and transitions it to HELD (quarantine).
         Deterministic selection rule: expedition_id matches, status in active states,
         handling_classification or description indicates temperature control, sorted by code ASC.
+        Zero fallback to ordinary non-cold-chain cargo.
         """
         active_statuses = [
             CargoStatus.READY.value,
@@ -342,45 +369,35 @@ class ScenarioInjectionService:
             CargoStatus.PACKED.value,
         ]
 
+        cold_chain_clause = or_(
+            CargoConsignmentModel.handling_classification.ilike("%cold%"),
+            CargoConsignmentModel.handling_classification.ilike("%temp%"),
+            CargoConsignmentModel.code.ilike("%cold%"),
+            CargoConsignmentModel.transport_plan_summary.ilike("%cold%"),
+        )
+
         stmt = (
             select(CargoConsignmentModel)
             .where(
                 CargoConsignmentModel.expedition_id == expedition_id,
                 CargoConsignmentModel.status.in_(active_statuses),
-                or_(
-                    CargoConsignmentModel.handling_classification.ilike("%cold%"),
-                    CargoConsignmentModel.handling_classification.ilike("%temp%"),
-                    CargoConsignmentModel.code.ilike("%cold%"),
-                    CargoConsignmentModel.transport_plan_summary.ilike("%cold%"),
-                ),
+                cold_chain_clause,
             )
             .order_by(CargoConsignmentModel.code.asc())
             .limit(1)
         )
         consignment = self.session.execute(stmt).scalar_one_or_none()
 
-        # Fallback to any active consignment in the expedition
-        if not consignment:
-            stmt_fallback = (
-                select(CargoConsignmentModel)
-                .where(
-                    CargoConsignmentModel.expedition_id == expedition_id,
-                    CargoConsignmentModel.status.in_(active_statuses),
-                )
-                .order_by(CargoConsignmentModel.code.asc())
-                .limit(1)
-            )
-            consignment = self.session.execute(stmt_fallback).scalar_one_or_none()
-
         hold_reason = "Cold-chain temperature excursion logged: storage temp reached +8.2°C for 14 hours."
 
         if not consignment:
-            # Check for already-quarantined cargo for idempotency replay
+            # Check for already-quarantined cold-chain cargo for idempotency replay
             stmt_already = (
                 select(CargoConsignmentModel)
                 .where(
                     CargoConsignmentModel.expedition_id == expedition_id,
                     CargoConsignmentModel.status == CargoStatus.HELD.value,
+                    cold_chain_clause,
                 )
                 .order_by(CargoConsignmentModel.code.asc())
                 .limit(1)
@@ -398,10 +415,9 @@ class ScenarioInjectionService:
                     data_provenance="SYNTHETIC_DEMO",
                 )
             raise DomainValidationError(
-                f"COLD_CHAIN_EXCURSION scenario failed: No active cargo consignments found for expedition {expedition_id}."
+                f"COLD_CHAIN_EXCURSION scenario failed: No active cold-chain/temperature-controlled cargo consignments found for expedition {expedition_id}."
             )
 
-        # Idempotency check: if already in HELD status with temperature excursion
         if (
             consignment.status == CargoStatus.HELD.value
             and consignment.exception_reason
