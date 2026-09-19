@@ -19,10 +19,11 @@ class ReplanTriggerRequest(BaseModel):
     """Request payload for triggering an operational replan cycle."""
     trigger_mode: str = Field(
         default="OPERATOR_REQUESTED",
-        description="Mode of trigger: 'OPERATOR_REQUESTED' or 'EVENT_TRIGGERED'"
+        description="Mode of trigger: 'OPERATOR_REQUESTED', 'EVENT_TRIGGERED', or 'INCIDENT_ESCALATION'"
     )
     expedition_id: Optional[uuid.UUID] = None
     mission_id: Optional[uuid.UUID] = None
+    incident_id: Optional[uuid.UUID] = None
     trigger_event_id: Optional[uuid.UUID] = None
     trigger_entity_type: Optional[str] = None
     trigger_entity_id: Optional[uuid.UUID] = None

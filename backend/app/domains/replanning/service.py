@@ -129,7 +129,7 @@ class ReplanService:
                     message="EVENT_TRIGGERED replan requires meaningful state change, operational impact (>0 affected entities), and at least one violated constraint or infeasible requirement.",
                     field="trigger_condition",
                 )
-        elif mode != "OPERATOR_REQUESTED":
+        elif mode not in ("OPERATOR_REQUESTED", "INCIDENT_ESCALATION"):
             raise DomainValidationError(
                 message=f"Unsupported trigger mode '{request.trigger_mode}'.",
                 field="trigger_mode",
@@ -139,13 +139,29 @@ class ReplanService:
         trigger_entity_type = (
             request.trigger_entity_type.upper()
             if request.trigger_entity_type
-            else (event.entity_type if event else None)
+            else ("INCIDENT" if request.incident_id else (event.entity_type if event else None))
         )
         trigger_entity_id = (
             request.trigger_entity_id
             if request.trigger_entity_id
-            else (event.entity_id if event else None)
+            else (request.incident_id if request.incident_id else (event.entity_id if event else None))
         )
+
+        # Idempotency check for incident escalation: return existing active replan
+        if (mode == "INCIDENT_ESCALATION" or trigger_entity_type == "INCIDENT") and trigger_entity_id:
+            from backend.app.domains.replanning.states import TERMINAL_REPLAN_STATUSES
+            existing_active_stmt = (
+                select(ReplanModel)
+                .where(
+                    ReplanModel.trigger_entity_type == "INCIDENT",
+                    ReplanModel.trigger_entity_id == trigger_entity_id,
+                    ReplanModel.status.not_in([s.value for s in TERMINAL_REPLAN_STATUSES]),
+                )
+                .order_by(ReplanModel.created_at.desc())
+            )
+            existing_active = self.session.execute(existing_active_stmt).scalars().first()
+            if existing_active:
+                return existing_active
         trigger_reason = (
             request.reason
             if request.reason
@@ -210,7 +226,7 @@ class ReplanService:
             affected_entities=affected_entities,
             requested_by=request.requested_by,
             correlation_id=cid,
-            data_provenance="DERIVED" if mode == "EVENT_TRIGGERED" else "SYNTHETIC_DEMO",
+            data_provenance="DERIVED" if mode in ("EVENT_TRIGGERED", "INCIDENT_ESCALATION") else "SYNTHETIC_DEMO",
             generated_at=datetime.now(timezone.utc),
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),

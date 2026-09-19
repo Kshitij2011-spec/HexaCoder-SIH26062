@@ -959,4 +959,39 @@ export interface ScenarioInjectResult {
   timestamp: string;
 }
 
+// ─── Control Tower Incident Escalation (A7) ────────────────────────────────
+
+export interface IncidentEscalationRequest {
+  requested_by?: string | null;
+  reason?: string | null;
+}
+
+export interface IncidentEscalationResult {
+  incident_id: string;
+  replan_id: string;
+  expedition_id: string;
+  correlation_id?: string | null;
+  affected_entities: Record<string, unknown>[];
+  violated_constraints: Record<string, unknown>[];
+  is_existing: boolean;
+  data_provenance: string;
+  message: string;
+}
+
+export interface IncidentContextView {
+  incident_id: string;
+  incident_code: string;
+  title: string;
+  severity: string;
+  status: string;
+  location_id?: string | null;
+  location_name?: string | null;
+  propagation_summary: string;
+  affected_entities: Record<string, unknown>[];
+  affected_missions: Record<string, unknown>[];
+  affected_constraints: Record<string, unknown>[];
+  correlation_id?: string | null;
+  data_provenance: string;
+}
+
 
