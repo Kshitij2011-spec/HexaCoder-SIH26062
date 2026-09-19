@@ -578,3 +578,133 @@ def test_incident_context_endpoint(clean_db, test_client):
     assert ctx["location_code"] == "LOC-MTR-STATION"
     assert ctx["asset_code"] == "AST-GEN-PRIMARY"
     assert ctx["data_provenance"] == "DERIVED"
+
+
+# ===========================================================================
+# HARDENING TEST CASES
+# ===========================================================================
+
+def test_impact_engine_failure_propagates_as_domain_error(clean_db, SessionFactory):
+    """H1. Impact engine infrastructure failure MUST NOT be silently swallowed.
+
+    When ImpactService.calculate_impact raises a non-domain exception (e.g.
+    database connectivity failure, serialisation error), the escalation must
+    fail with a DomainValidationError containing the IMPACT_ENGINE_FAILURE
+    code and diagnostic details rather than silently producing an incomplete
+    blast radius.
+    """
+    from unittest.mock import patch
+    inc_id = clean_db["active_incident_id"]
+    exp_id = clean_db["expedition_id"]
+    session = SessionFactory()
+
+    svc = IncidentEscalationService(session)
+
+    with patch.object(
+        svc.impact_service,
+        "calculate_impact",
+        side_effect=RuntimeError("Simulated infrastructure failure in impact engine"),
+    ):
+        with pytest.raises(DomainValidationError) as exc_info:
+            svc.escalate_incident(
+                incident_id=inc_id,
+                expedition_id=exp_id,
+            )
+        err = exc_info.value
+        assert err.code == "IMPACT_ENGINE_FAILURE"
+        assert "impact_analysis" == err.field
+        assert err.details["incident_code"] == "INC-A7-001"
+        assert err.details["failed_seeds"] > 0
+        assert len(err.details["failures"]) > 0
+        # Each failure entry must contain diagnostic info
+        first_failure = err.details["failures"][0]
+        assert "seed_type" in first_failure
+        assert "seed_id" in first_failure
+        assert "Simulated infrastructure failure" in first_failure["error"]
+
+    session.close()
+
+
+def test_expedition_unresolvable_raises_domain_error(clean_db, SessionFactory):
+    """H2. Incident with no resolvable expedition MUST be rejected.
+
+    An incident escalation must NEVER choose an arbitrary expedition.
+    If neither an explicit expedition_id, nor the incident's expedition_id,
+    nor the primary affected mission's expedition_id can be resolved, the
+    system must raise DomainValidationError with EXPEDITION_UNRESOLVABLE code.
+    """
+    inc_id = clean_db["active_incident_id"]
+    exp_id = clean_db["expedition_id"]
+    session = SessionFactory()
+
+    # Create a bare incident with NO expedition_id
+    orphan_inc = IncidentModel(
+        id=uuid.uuid4(),
+        incident_code="INC-A7-ORPHAN",
+        title="Orphan Incident Without Expedition",
+        description="Testing unresolvable expedition.",
+        incident_type="EQUIPMENT_FAILURE",
+        severity=IncidentSeverity.LOW.value,
+        priority=5,
+        location_id=None,
+        asset_id=None,
+        expedition_id=None,
+        status=IncidentStatus.OPEN.value,
+        data_provenance="SYNTHETIC_DEMO",
+    )
+    session.add(orphan_inc)
+    session.commit()
+
+    svc = IncidentEscalationService(session)
+
+    with pytest.raises(DomainValidationError) as exc_info:
+        svc.escalate_incident(
+            incident_id=orphan_inc.id,
+            # No explicit expedition_id provided
+        )
+    err = exc_info.value
+    assert err.code == "EXPEDITION_UNRESOLVABLE"
+    assert err.field == "expedition_id"
+    assert err.details["incident_code"] == "INC-A7-ORPHAN"
+
+    session.close()
+
+
+def test_domain_errors_in_impact_are_non_fatal(clean_db, SessionFactory):
+    """H3. Known domain errors from ImpactService (EntityNotFound, DomainValidation)
+    for individual seeds are non-fatal — escalation proceeds with remaining seeds.
+    """
+    from unittest.mock import patch, MagicMock
+    from backend.app.core.errors import EntityNotFoundError as ENF
+    inc_id = clean_db["active_incident_id"]
+    exp_id = clean_db["expedition_id"]
+    session = SessionFactory()
+
+    # Clear any existing replans for this incident so we get a fresh escalation
+    session.query(ReplanModel).filter(
+        ReplanModel.trigger_entity_type == "INCIDENT",
+        ReplanModel.trigger_entity_id == inc_id,
+    ).delete()
+    session.commit()
+
+    svc = IncidentEscalationService(session)
+
+    # Make calculate_impact raise EntityNotFoundError for every seed — this is
+    # a domain error and should be non-fatal, allowing the escalation to complete
+    # with just the direct seed references in the blast radius.
+    with patch.object(
+        svc.impact_service,
+        "calculate_impact",
+        side_effect=ENF("TestEntity", uuid.uuid4()),
+    ):
+        result = svc.escalate_incident(
+            incident_id=inc_id,
+            expedition_id=exp_id,
+        )
+        # Escalation should succeed despite all domain errors in impact
+        assert result.replan_id is not None
+        assert result.replan_status == "REQUESTED"
+        # Direct seed references should still be in the blast radius
+        assert len(result.affected_entities) > 0
+
+    session.close()

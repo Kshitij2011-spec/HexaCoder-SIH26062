@@ -10,6 +10,7 @@ Coordinates cross-domain incident response and the Control Tower replanning engi
 7. Strictly preserves human governance (NO autonomous approval or mutation).
 """
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Set, Tuple
@@ -33,7 +34,6 @@ from backend.app.domains.control_tower.schemas import (
 from backend.app.domains.missions.models import MissionModel
 from backend.app.domains.locations.models import LocationModel
 from backend.app.domains.assets.models import AssetModel
-from backend.app.domains.expeditions.models import ExpeditionModel
 from backend.app.platform.events.service import EventService
 from backend.app.platform.audit.service import AuditService
 from backend.app.core.errors import (
@@ -111,6 +111,9 @@ class IncidentEscalationService:
             )
 
         # 4. Idempotency Check: Return existing active replan if present
+        #    CROSS-DOMAIN READ (ReplanModel): Direct query required for idempotency
+        #    check — no public ReplanService method exists that queries by
+        #    trigger_entity_type + trigger_entity_id + non-terminal status.
         active_replan_stmt = (
             select(ReplanModel)
             .where(
@@ -188,7 +191,13 @@ class IncidentEscalationService:
                     "reason": f"Directly referenced by incident {incident.incident_code}",
                 }
 
-        # Traverse semantic dependencies from seeds
+        # Traverse semantic dependencies from seeds.
+        # ISSUE-1 FIX: Impact engine failures MUST propagate as domain errors.
+        # If dependency traversal or constraint evaluation fails, the system
+        # must not silently produce an incomplete blast radius and proceed
+        # to create a replan based on partial/missing impact data.
+        _logger = logging.getLogger(__name__)
+        impact_failures: List[Dict[str, Any]] = []
         for st_type, st_id in unique_seeds:
             try:
                 impact_res = self.impact_service.calculate_impact(
@@ -208,8 +217,49 @@ class IncidentEscalationService:
                         c_id = str(c_dict.get("constraint_id") or c_dict.get("code"))
                         if c_id not in merged_constraints:
                             merged_constraints[c_id] = c_dict
-            except Exception:
-                pass
+            except (DomainValidationError, EntityNotFoundError):
+                # Known domain errors (e.g. seed entity not in dependency graph)
+                # are non-fatal — the seed simply contributes no additional
+                # downstream impact beyond its direct reference entry.
+                _logger.warning(
+                    "Impact calculation returned domain error for seed (%s, %s) "
+                    "during incident %s escalation — seed skipped.",
+                    st_type, st_id, incident.incident_code,
+                )
+            except Exception as exc:
+                # Infrastructure / unexpected failures are collected and
+                # surfaced after all seeds are attempted, to give the operator
+                # maximum diagnostic context.
+                impact_failures.append({
+                    "seed_type": st_type,
+                    "seed_id": str(st_id),
+                    "error": str(exc),
+                })
+                _logger.error(
+                    "Impact engine failure for seed (%s, %s) during incident %s "
+                    "escalation: %s",
+                    st_type, st_id, incident.incident_code, exc,
+                    exc_info=True,
+                )
+
+        if impact_failures:
+            raise DomainValidationError(
+                message=(
+                    f"Impact analysis failed for {len(impact_failures)} of "
+                    f"{len(unique_seeds)} seed entities during escalation of "
+                    f"incident '{incident.incident_code}'. Cannot produce a "
+                    f"reliable blast radius for replanning."
+                ),
+                field="impact_analysis",
+                code="IMPACT_ENGINE_FAILURE",
+                details={
+                    "incident_code": incident.incident_code,
+                    "incident_id": str(incident.id),
+                    "failures": impact_failures,
+                    "total_seeds": len(unique_seeds),
+                    "failed_seeds": len(impact_failures),
+                },
+            )
 
         affected_entities_list = list(merged_affected.values())
         violated_constraints_list = list(merged_constraints.values())
@@ -220,17 +270,33 @@ class IncidentEscalationService:
         ]
         primary_mission_id = uuid.UUID(str(aff_missions[0]["entity_id"])) if aff_missions else None
 
-        # 8. Resolve target expedition
+        # 8. Resolve target expedition — STRICT resolution order:
+        #    explicit expedition_id → incident.expedition_id → primary mission's expedition_id
+        #    If none resolves, reject the escalation. An incident escalation
+        #    must NEVER choose an arbitrary expedition.
         if not target_expedition_id and primary_mission_id:
+            #  CROSS-DOMAIN READ (MissionModel): Read-only lookup to resolve
+            #  the expedition boundary from the first affected mission. No
+            #  public MissionService.get_expedition_id() method exists.
             m_ent = self.session.get(MissionModel, primary_mission_id)
             if m_ent and m_ent.expedition_id:
                 target_expedition_id = m_ent.expedition_id
         if not target_expedition_id:
-            exp_ent = self.session.execute(select(ExpeditionModel).limit(1)).scalars().first()
-            if exp_ent:
-                target_expedition_id = exp_ent.id
-            else:
-                target_expedition_id = uuid.UUID(int=0)
+            raise DomainValidationError(
+                message=(
+                    f"Cannot resolve expedition for incident '{incident.incident_code}'. "
+                    f"Provide an explicit expedition_id, or ensure the incident or its "
+                    f"affected missions are associated with a valid expedition."
+                ),
+                field="expedition_id",
+                code="EXPEDITION_UNRESOLVABLE",
+                details={
+                    "incident_code": incident.incident_code,
+                    "incident_id": str(incident.id),
+                    "incident_expedition_id": str(incident.expedition_id) if incident.expedition_id else None,
+                    "primary_mission_id": str(primary_mission_id) if primary_mission_id else None,
+                },
+            )
 
         # 9. Create operational replan request (REQUESTED state, no autonomous approval/apply)
         req_by_uuid = None
@@ -351,6 +417,9 @@ class IncidentEscalationService:
         if not incident:
             raise EntityNotFoundError("Incident", incident_id)
 
+        # CROSS-DOMAIN READ (LocationModel): Read-only lookup for display
+        # context in the escalation banner. No public LocationService.get_code()
+        # method exists; the incident already owns the location_id FK.
         loc_code = None
         loc_name = None
         if incident.location_id:
@@ -359,6 +428,8 @@ class IncidentEscalationService:
                 loc_code = loc.code
                 loc_name = loc.name
 
+        # CROSS-DOMAIN READ (AssetModel): Read-only lookup for display context.
+        # No public AssetService.get_code() method exists.
         asset_code = None
         if incident.asset_id:
             ast = self.session.get(AssetModel, incident.asset_id)
@@ -367,6 +438,10 @@ class IncidentEscalationService:
 
         props = self.propagation_service.list_propagations(incident.id)
 
+        # CROSS-DOMAIN READ (ReplanModel): Direct query for linked replan to
+        # populate the context banner. Same justification as the idempotency
+        # check in escalate_incident — no public ReplanService query method
+        # supports this filter combination.
         active_replan_stmt = (
             select(ReplanModel)
             .where(
