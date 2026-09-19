@@ -17,10 +17,11 @@ import { LoadingSkeleton } from '../../../components/shared/LoadingSkeleton';
 import { EmptyState } from '../../../components/shared/EmptyState';
 import { ErrorDisplay } from '../../../components/shared/ErrorDisplay';
 import { useMissionOperations } from '../hooks/useControlTower';
-import type { ReadinessState } from '../../../lib/types/api';
+import type { ReadinessState, MissionOperationsItem } from '../../../lib/types/api';
 
 export interface MissionReadinessGridProps {
   expeditionId: string;
+  onInitiateReplan?: (mission: MissionOperationsItem) => void;
 }
 
 const READINESS_FILTER_OPTIONS: { label: string; value: string }[] = [
@@ -51,7 +52,10 @@ const READINESS_BADGE_STYLES: Record<ReadinessState | string, string> = {
   UNKNOWN: 'bg-slate-800 text-slate-400 border-slate-600',
 };
 
-export function MissionReadinessGrid({ expeditionId }: MissionReadinessGridProps) {
+export function MissionReadinessGrid({
+  expeditionId,
+  onInitiateReplan,
+}: MissionReadinessGridProps) {
   const [readinessFilter, setReadinessFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -562,6 +566,21 @@ export function MissionReadinessGrid({ expeditionId }: MissionReadinessGridProps
                     <p className="text-xs text-slate-500 italic">No operational events recorded.</p>
                   )}
                 </div>
+
+                {/* Section 5: Operator Actions */}
+                {onInitiateReplan && (
+                  <div className="pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      data-testid={`initiate-replan-mission-${selectedMission.code.toLowerCase()}`}
+                      onClick={() => onInitiateReplan(selectedMission)}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold text-xs tracking-wide transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Initiate Operational Replan</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

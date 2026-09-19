@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Filter,
+  RotateCcw,
 } from 'lucide-react';
 import { EntityCode } from '../../../components/shared/EntityCode';
 import { StatusBadge } from '../../../components/shared/StatusBadge';
@@ -19,6 +20,7 @@ import type { ControlTowerConstraintItem, ConstraintState } from '../../../lib/t
 
 export interface ActiveConstraintsFeedProps {
   expeditionId: string;
+  onInitiateReplanForConstraint?: (constraint: ControlTowerConstraintItem) => void;
 }
 
 const STATE_FILTER_OPTIONS: { label: string; value: string }[] = [
@@ -55,7 +57,10 @@ const STATE_BADGE_CONFIG: Record<
   },
 };
 
-export function ActiveConstraintsFeed({ expeditionId }: ActiveConstraintsFeedProps) {
+export function ActiveConstraintsFeed({
+  expeditionId,
+  onInitiateReplanForConstraint,
+}: ActiveConstraintsFeedProps) {
   const [stateFilter, setStateFilter] = useState<string>('');
   const [hardOrSoftFilter, setHardOrSoftFilter] = useState<string>('');
   const [page, setPage] = useState<number>(1);
@@ -330,6 +335,21 @@ export function ActiveConstraintsFeed({ expeditionId }: ActiveConstraintsFeedPro
                           </dl>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Operator Action for Violated Constraint */}
+                  {c.state === 'VIOLATED' && onInitiateReplanForConstraint && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center justify-end">
+                      <button
+                        type="button"
+                        data-testid={`initiate-replan-constraint-${c.code.toLowerCase()}`}
+                        onClick={() => onInitiateReplanForConstraint(c)}
+                        className="px-2.5 py-1 text-xs font-mono font-semibold text-amber-300 bg-amber-950/50 border border-amber-800/80 hover:bg-amber-900/60 rounded flex items-center gap-1.5 transition-colors focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Initiate Replan</span>
+                      </button>
                     </div>
                   )}
                 </article>

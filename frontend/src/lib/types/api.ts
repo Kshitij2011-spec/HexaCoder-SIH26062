@@ -869,3 +869,94 @@ export interface ReplanApplyResult {
   message: string;
 }
 
+export interface ReplanTriggerRequest {
+  trigger_mode: 'EVENT_DRIVEN' | 'OPERATOR_REQUESTED';
+  expedition_id: string;
+  mission_id?: string | null;
+  trigger_event_id?: string | null;
+  trigger_entity_type?: string | null;
+  trigger_entity_id?: string | null;
+  reason?: string | null;
+  current_state_evidence?: Record<string, unknown>;
+  violated_constraints?: unknown[];
+  affected_entities?: unknown[];
+  requested_by?: string | null;
+  correlation_id?: string | null;
+}
+
+export interface ReplanRead {
+  id: string;
+  replan_code: string;
+  expedition_id: string;
+  mission_id?: string | null;
+  trigger_event_id?: string | null;
+  trigger_entity_type?: string | null;
+  trigger_entity_id?: string | null;
+  trigger_reason?: string | null;
+  status: string;
+  current_state_evidence: Record<string, unknown>;
+  violated_constraints: unknown[];
+  affected_entities: unknown[];
+  requested_by?: string | null;
+  correlation_id?: string | null;
+  generated_at: string;
+  completed_at?: string | null;
+  data_provenance: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type OptionFeasibility = 'FEASIBLE' | 'CONSTRAINED' | 'NOT_EVALUABLE' | 'INFEASIBLE';
+
+export interface ReplanOptionRead {
+  id: string;
+  replan_id?: string | null;
+  recommendation_id?: string | null;
+  option_code: string;
+  title: string;
+  description: string;
+  action_type: string;
+  feasibility: OptionFeasibility;
+  estimated_delay_hours: number;
+  estimated_cost_delta: number;
+  risk_score: number;
+  affected_entities: unknown[];
+  violated_constraints: unknown[];
+  proposed_changes: unknown[];
+  assumptions: string[];
+  operational_tradeoffs: Record<string, unknown>;
+  data_provenance: string;
+  created_at: string;
+}
+
+export interface ReplanGenerationResult {
+  replan_id: string;
+  options: ReplanOptionRead[];
+  recommendations: RecommendationRead[];
+}
+
+// ─── Control Tower Disruption Scenarios (A6) ────────────────────────────────
+
+export type BenchmarkScenarioKey =
+  | 'FLIGHT_GROUNDING'
+  | 'GENERATOR_FAILURE'
+  | 'COLD_CHAIN_EXCURSION';
+
+export interface ScenarioInjectRequest {
+  scenario_key: BenchmarkScenarioKey;
+  expedition_id: string;
+  requested_by?: string | null;
+}
+
+export interface ScenarioInjectResult {
+  scenario_key: string;
+  summary: string;
+  trigger_event_id?: string | null;
+  affected_entity_type: string;
+  affected_entity_id: string;
+  affected_entity_code: string;
+  data_provenance: string;
+  timestamp: string;
+}
+
+

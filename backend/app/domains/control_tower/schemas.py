@@ -214,3 +214,26 @@ class ConsequentialActionItem(BaseModel):
     correlation_id: Optional[uuid.UUID] = None
     created_at: datetime
     data_provenance: str = "DERIVED"
+
+
+# ---------------------------------------------------------------------------
+# 8. Scenario Injection (A6)
+# ---------------------------------------------------------------------------
+
+class ScenarioInjectRequest(BaseModel):
+    """Payload for triggering a deterministic benchmark disruption scenario."""
+    scenario_key: str = Field(..., description="Approved benchmark scenario key: FLIGHT_GROUNDING, GENERATOR_FAILURE, COLD_CHAIN_EXCURSION")
+    expedition_id: uuid.UUID = Field(..., description="Target expedition ID. Strictly required for tenant isolation.")
+    requested_by: Optional[uuid.UUID] = Field(None, description="Operator person ID triggering the disruption.")
+
+
+class ScenarioInjectResult(BaseModel):
+    """Outcome of a deterministic benchmark disruption injection."""
+    scenario_key: str
+    summary: str
+    trigger_event_id: Optional[uuid.UUID] = None
+    affected_entity_type: str
+    affected_entity_id: uuid.UUID
+    affected_entity_code: str
+    data_provenance: str = "SYNTHETIC_DEMO"
+

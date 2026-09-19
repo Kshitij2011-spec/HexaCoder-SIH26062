@@ -15,6 +15,12 @@ import type {
   ReadinessState,
   ConstraintState,
   RecommendationRead,
+  ReplanTriggerRequest,
+  ReplanRead,
+  ReplanOptionRead,
+  ReplanGenerationResult,
+  ScenarioInjectRequest,
+  ScenarioInjectResult,
 } from '../../../lib/types/api';
 
 // ─── Filter Contracts ────────────────────────────────────────────────────────
@@ -339,3 +345,99 @@ export function useApprovalMutations(defaultExpeditionId?: string) {
     applyMutation,
   };
 }
+
+// ─── A6 Closed-Loop Hooks ───────────────────────────────────────────────────
+
+export function useReplan(replanId?: string | null) {
+  return useQuery({
+    queryKey: ['replans', replanId] as const,
+    queryFn: async () => {
+      if (!replanId) return null;
+      return await apiClient.get<ReplanRead>(`/replans/${replanId}`);
+    },
+    enabled: Boolean(replanId),
+  });
+}
+
+export function useInitiateReplan(defaultExpeditionId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ReplanTriggerRequest) => {
+      return await apiClient.post<ReplanRead>('/replans', payload);
+    },
+    onSuccess: (_data, variables) => {
+      const expId = variables.expedition_id || defaultExpeditionId;
+      if (expId) {
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.decisions(expId) });
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.summary(expId) });
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.missionsRoot(expId) });
+      }
+      queryClient.invalidateQueries({ queryKey: ['control-tower', 'overview'] });
+    },
+  });
+}
+
+export function useGenerateOptions(defaultExpeditionId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ replanId }: { replanId: string; expeditionId?: string }): Promise<ReplanGenerationResult> => {
+      const res = await apiClient.post<any>(`/replans/${replanId}/generate-options`, {});
+      let options: ReplanOptionRead[] = [];
+      let recommendations: RecommendationRead[] = [];
+      if (Array.isArray(res)) {
+        options = res;
+      } else if (res && Array.isArray((res as any).options)) {
+        options = (res as any).options;
+        if (Array.isArray((res as any).recommendations)) {
+          recommendations = (res as any).recommendations;
+        }
+      }
+      if (recommendations.length === 0) {
+        try {
+          const recs = await apiClient.get<RecommendationRead[]>(`/replans/${replanId}/recommendations`);
+          if (Array.isArray(recs)) {
+            recommendations = recs;
+          }
+        } catch {
+          recommendations = [];
+        }
+      }
+      return {
+        replan_id: replanId,
+        options,
+        recommendations,
+      };
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['replans', variables.replanId] });
+      const expId = variables.expeditionId || defaultExpeditionId;
+      if (expId) {
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.decisions(expId) });
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.summary(expId) });
+      }
+      queryClient.invalidateQueries({ queryKey: ['control-tower', 'overview'] });
+    },
+  });
+}
+
+export function useInjectScenario(defaultExpeditionId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ScenarioInjectRequest) => {
+      return await apiClient.post<ScenarioInjectResult>('/control-tower/scenarios/inject', payload);
+    },
+    onSuccess: (_data, variables) => {
+      const expId = variables.expedition_id || defaultExpeditionId;
+      if (expId) {
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.expedition(expId) });
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.summary(expId) });
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.missionsRoot(expId) });
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.constraintsRoot(expId) });
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.eventsRoot(expId) });
+        queryClient.invalidateQueries({ queryKey: controlTowerKeys.decisions(expId) });
+      }
+      queryClient.invalidateQueries({ queryKey: ['control-tower', 'overview'] });
+    },
+  });
+}
+

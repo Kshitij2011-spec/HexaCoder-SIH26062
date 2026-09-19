@@ -70,6 +70,7 @@ class ReplanService:
         self,
         request: ReplanTriggerRequest,
         actor_context: Optional[Dict[str, Any]] = None,
+        auto_commit: bool = True,
     ) -> ReplanModel:
         """
         Creates an operational replan record under strict trigger validation:
@@ -242,6 +243,9 @@ class ReplanService:
                 metadata={"trigger_mode": mode, "reason": trigger_reason},
             )
 
+        if auto_commit:
+            self.session.commit()
+
         return created
 
     def create_replan_from_event(
@@ -299,6 +303,7 @@ class ReplanService:
         self,
         replan_id: uuid.UUID,
         actor_context: Optional[Dict[str, Any]] = None,
+        auto_commit: bool = True,
     ) -> Tuple[List[ReplanOptionModel], List[RecommendationModel]]:
         """
         Deterministic Candidate Option & Explainable Recommendation Generator:
@@ -708,6 +713,9 @@ class ReplanService:
                 metadata={"options": [o.option_code for o in candidate_options]},
             )
 
+        if auto_commit:
+            self.session.commit()
+
         return candidate_options, recommendations
 
 
@@ -788,6 +796,7 @@ class ApprovalService:
         approval_id: uuid.UUID,
         request: ApprovalDecisionRequest,
         actor_context: Optional[Dict[str, Any]] = None,
+        auto_commit: bool = True,
     ) -> ApprovalModel:
         """
         Submits an authoritative human decision (APPROVED or REJECTED) on an approval request.
@@ -871,6 +880,9 @@ class ApprovalService:
                 actor_person_id=request.approver_person_id,
                 metadata={"comment": request.comment, "approval_id": str(approval.id)},
             )
+
+        if auto_commit:
+            self.session.commit()
 
         return approval
 

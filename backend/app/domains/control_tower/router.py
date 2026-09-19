@@ -16,7 +16,10 @@ from backend.app.domains.control_tower.schemas import (
     ControlTowerConstraintItem,
     DecisionQueueSummary,
     ConsequentialActionItem,
+    ScenarioInjectRequest,
+    ScenarioInjectResult,
 )
+from backend.app.domains.control_tower.scenarios import ScenarioInjectionService
 from backend.app.shared.schemas.envelope import (
     ApiResponse,
     PaginationMeta,
@@ -201,3 +204,23 @@ def get_consequential_actions_audit(
         correlation_id=request.headers.get("X-Request-ID") if request else None,
         pagination=pagination,
     )
+
+
+@router.post("/scenarios/inject", response_model=ApiResponse[ScenarioInjectResult])
+def inject_operational_scenario(
+    payload: ScenarioInjectRequest,
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Injects a deterministic benchmark disruption scenario (FLIGHT_GROUNDING, GENERATOR_FAILURE, COLD_CHAIN_EXCURSION).
+    Enforces dynamic entity discovery, expedition isolation, safe idempotency, and strict human-in-the-loop control.
+    Does NOT autonomously create replans or apply mutations.
+    """
+    service = ScenarioInjectionService(db)
+    result = service.inject(payload)
+    return create_success_response(
+        data=result,
+        correlation_id=request.headers.get("X-Request-ID") if request else None,
+    )
+
