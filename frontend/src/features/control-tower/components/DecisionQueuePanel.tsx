@@ -23,6 +23,7 @@ import type {
 export interface DecisionQueuePanelProps {
   expeditionId: string;
   onSelectRecommendation?: (recommendationId: string) => void;
+  onViewReplanOptions?: (replanId: string) => void;
 }
 
 type TabKey = 'approvals' | 'recommendations' | 'replans';
@@ -30,6 +31,7 @@ type TabKey = 'approvals' | 'recommendations' | 'replans';
 export function DecisionQueuePanel({
   expeditionId,
   onSelectRecommendation,
+  onViewReplanOptions,
 }: DecisionQueuePanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('approvals');
   const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
@@ -381,6 +383,17 @@ export function DecisionQueuePanel({
                         <span className={item.violated_constraints_count > 0 ? 'text-amber-400' : ''}>
                           Violated constraints: {item.violated_constraints_count}
                         </span>
+                        {onViewReplanOptions && (
+                          <button
+                            type="button"
+                            data-testid={`explore-replan-${item.replan_code.toLowerCase()}`}
+                            onClick={() => onViewReplanOptions(item.replan_id)}
+                            className="px-2.5 py-1 text-xs font-medium text-sky-300 bg-sky-950/60 border border-sky-800 hover:bg-sky-900/60 rounded flex items-center gap-1 focus:outline-none focus:ring-1 focus:ring-sky-500 font-sans"
+                          >
+                            <span>Explore / Generate Options</span>
+                            <ArrowUpRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <div className="flex items-center gap-1 text-slate-500">
                           <Clock className="w-3 h-3" />
                           <span>{new Date(item.created_at).toLocaleString()}</span>

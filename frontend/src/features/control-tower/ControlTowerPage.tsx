@@ -6,15 +6,48 @@ import { ErrorDisplay } from '../../components/shared/ErrorDisplay';
 import { EmptyState } from '../../components/shared/EmptyState';
 import { useControlTowerOverview } from './hooks/useControlTower';
 import { ExpeditionContextBar } from './components/ExpeditionContextBar';
+import { ScenarioCockpitBanner } from './components/ScenarioCockpitBanner';
 import { MissionReadinessGrid } from './components/MissionReadinessGrid';
 import { ActiveConstraintsFeed } from './components/ActiveConstraintsFeed';
 import { DecisionQueuePanel } from './components/DecisionQueuePanel';
 import { OperationalEventsFeed } from './components/OperationalEventsFeed';
 import { ConsequentialAuditTimeline } from './components/ConsequentialAuditTimeline';
+import { InitiateReplanModal } from './components/InitiateReplanModal';
+import { MitigationOptionsExplorer } from './components/MitigationOptionsExplorer';
+import { ApprovalModal } from './components/ApprovalModal';
+import type { MissionOperationsItem, ControlTowerConstraintItem } from '../../lib/types/api';
+
+interface InitiateModalState {
+  isOpen: boolean;
+  missionId?: string | null;
+  missionCode?: string | null;
+  missionTitle?: string | null;
+  constraintCode?: string | null;
+  reason?: string;
+}
 
 export function ControlTowerPage() {
   const { data: overview, isLoading, error } = useControlTowerOverview();
   const [selectedExpeditionId, setSelectedExpeditionId] = useState<string | null>(null);
+
+  // Modal states for closed-loop operational workflows
+  const [initiateModalState, setInitiateModalState] = useState<InitiateModalState>({
+    isOpen: false,
+  });
+  const [optionsExplorerState, setOptionsExplorerState] = useState<{
+    isOpen: boolean;
+    replanId: string | null;
+  }>({
+    isOpen: false,
+    replanId: null,
+  });
+  const [approvalModalState, setApprovalModalState] = useState<{
+    isOpen: boolean;
+    recommendationId: string | null;
+  }>({
+    isOpen: false,
+    recommendationId: null,
+  });
 
   // Synchronize initial expedition selection with the overview response
   useEffect(() => {
@@ -28,6 +61,38 @@ export function ControlTowerPage() {
     (overview?.expeditions && overview.expeditions.length > 0
       ? overview.expeditions[0].expedition_id
       : null);
+
+  const handleInitiateMissionReplan = (mission: MissionOperationsItem) => {
+    setInitiateModalState({
+      isOpen: true,
+      missionId: mission.mission_id,
+      missionCode: mission.code,
+      missionTitle: mission.title,
+      reason: `Operational disruption affecting mission ${mission.code} (${mission.title}); operator initiated replanning required.`,
+    });
+  };
+
+  const handleInitiateConstraintReplan = (constraint: ControlTowerConstraintItem) => {
+    setInitiateModalState({
+      isOpen: true,
+      constraintCode: constraint.code,
+      reason: `Hard constraint violation detected for ${constraint.code}: ${constraint.reason}`,
+    });
+  };
+
+  const handleReplanCreated = (newReplanId: string) => {
+    setOptionsExplorerState({
+      isOpen: true,
+      replanId: newReplanId,
+    });
+  };
+
+  const handleSelectRecommendation = (recId: string) => {
+    setApprovalModalState({
+      isOpen: true,
+      recommendationId: recId,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -79,20 +144,68 @@ export function ControlTowerPage() {
             isLoadingExpeditions={isLoading}
           />
 
+          {/* Polar Disruption Scenario Injection Cockpit */}
+          <ScenarioCockpitBanner expeditionId={activeExpeditionId} />
+
           {/* Mission Readiness Grid & Operations */}
-          <MissionReadinessGrid expeditionId={activeExpeditionId} />
+          <MissionReadinessGrid
+            expeditionId={activeExpeditionId}
+            onInitiateReplan={handleInitiateMissionReplan}
+          />
 
           {/* Decision Queue & Human Governance Boundary */}
-          <DecisionQueuePanel expeditionId={activeExpeditionId} />
+          <DecisionQueuePanel
+            expeditionId={activeExpeditionId}
+            onSelectRecommendation={handleSelectRecommendation}
+            onViewReplanOptions={(replanId) =>
+              setOptionsExplorerState({ isOpen: true, replanId })
+            }
+          />
 
           {/* Active Constraints & Invariants */}
-          <ActiveConstraintsFeed expeditionId={activeExpeditionId} />
+          <ActiveConstraintsFeed
+            expeditionId={activeExpeditionId}
+            onInitiateReplanForConstraint={handleInitiateConstraintReplan}
+          />
 
           {/* Operational Events Chronological Ledger */}
           <OperationalEventsFeed expeditionId={activeExpeditionId} />
 
           {/* Consequential Audit Timeline */}
           <ConsequentialAuditTimeline expeditionId={activeExpeditionId} />
+
+          {/* ─── Modal Workflows ─── */}
+
+          {/* 1. Initiate Replan Modal */}
+          <InitiateReplanModal
+            isOpen={initiateModalState.isOpen}
+            onClose={() => setInitiateModalState({ isOpen: false })}
+            expeditionId={activeExpeditionId}
+            missionId={initiateModalState.missionId}
+            missionCode={initiateModalState.missionCode}
+            missionTitle={initiateModalState.missionTitle}
+            constraintCode={initiateModalState.constraintCode}
+            initialReason={initiateModalState.reason}
+            onReplanCreated={handleReplanCreated}
+          />
+
+          {/* 2. Candidate Mitigation Options Explorer Modal */}
+          <MitigationOptionsExplorer
+            isOpen={optionsExplorerState.isOpen}
+            onClose={() => setOptionsExplorerState({ isOpen: false, replanId: null })}
+            replanId={optionsExplorerState.replanId}
+            expeditionId={activeExpeditionId}
+            onSelectRecommendation={handleSelectRecommendation}
+          />
+
+          {/* 3. Canonical Approval & Governance Modal */}
+          {approvalModalState.isOpen && approvalModalState.recommendationId && (
+            <ApprovalModal
+              recommendationId={approvalModalState.recommendationId}
+              onClose={() => setApprovalModalState({ isOpen: false, recommendationId: null })}
+              expeditionId={activeExpeditionId}
+            />
+          )}
         </>
       )}
     </div>
