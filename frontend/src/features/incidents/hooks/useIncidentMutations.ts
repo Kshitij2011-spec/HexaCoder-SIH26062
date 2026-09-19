@@ -7,6 +7,8 @@ import type {
   IncidentUpdateRequest,
   IncidentStatusTransitionRequest,
   IncidentReferenceCreateRequest,
+  IncidentEscalationRequest,
+  IncidentEscalationResult,
 } from '../../../lib/types/api';
 
 export function useCreateIncident() {
@@ -114,6 +116,25 @@ export function useAddIncidentReference(incidentId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['incident-references', incidentId] });
       queryClient.invalidateQueries({ queryKey: ['incident-timeline', incidentId] });
+    },
+  });
+}
+
+export function useEscalateIncidentToReplan(incidentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: IncidentEscalationRequest = {}) => {
+      return await apiClient.post<IncidentEscalationResult>(
+        `/control-tower/incidents/${incidentId}/escalate`,
+        payload
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['replans'] });
+      queryClient.invalidateQueries({ queryKey: ['control-tower'] });
+      queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      queryClient.invalidateQueries({ queryKey: ['incident', incidentId] });
+      queryClient.invalidateQueries({ queryKey: ['incident-context', incidentId] });
     },
   });
 }

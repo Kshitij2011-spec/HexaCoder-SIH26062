@@ -21,6 +21,7 @@ import type {
   ReplanGenerationResult,
   ScenarioInjectRequest,
   ScenarioInjectResult,
+  IncidentContextView,
 } from '../../../lib/types/api';
 
 // ─── Filter Contracts ────────────────────────────────────────────────────────
@@ -438,6 +439,17 @@ export function useInjectScenario(defaultExpeditionId?: string) {
       }
       queryClient.invalidateQueries({ queryKey: ['control-tower', 'overview'] });
     },
+  });
+}
+
+export function useIncidentContext(incidentId?: string | null) {
+  return useQuery({
+    queryKey: ['incident-context', incidentId] as const,
+    queryFn: async () => {
+      if (!incidentId) return null;
+      return await apiClient.get<IncidentContextView>(`/control-tower/incidents/${incidentId}/context`);
+    },
+    enabled: Boolean(incidentId),
   });
 }
 

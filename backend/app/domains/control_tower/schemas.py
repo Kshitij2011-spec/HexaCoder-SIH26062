@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -236,4 +236,69 @@ class ScenarioInjectResult(BaseModel):
     affected_entity_id: uuid.UUID
     affected_entity_code: str
     data_provenance: str = "SYNTHETIC_DEMO"
+
+
+# ---------------------------------------------------------------------------
+# 9. Incident Escalation & Response Bridge (A7)
+# ---------------------------------------------------------------------------
+
+class IncidentEscalationRequest(BaseModel):
+    """Payload for escalating an active operational incident to Control Tower replanning."""
+    model_config = ConfigDict(extra="ignore")
+
+    expedition_id: Optional[uuid.UUID] = Field(None, description="Optional target expedition UUID")
+    requested_by: Optional[str] = Field(None, description="Operator or system identifier requesting escalation")
+    reason: Optional[str] = Field(None, description="Operational justification or reason for escalation")
+    depth: int = Field(default=3, ge=1, le=5, description="Graph traversal depth for blast-radius calculation")
+    correlation_id: Optional[str] = Field(None, description="Explicit request correlation UUID or trace string")
+
+
+class IncidentEscalationResult(BaseModel):
+    """Result of escalating an operational incident into Control Tower replanning."""
+    incident_id: uuid.UUID
+    incident_code: str
+    incident_title: str
+    incident_severity: str
+    incident_status: str
+    expedition_id: uuid.UUID
+    replan_id: uuid.UUID
+    replan_code: str
+    replan_status: str
+    affected_entities: List[Dict[str, Any]] = Field(default_factory=list)
+    violated_constraints: List[Dict[str, Any]] = Field(default_factory=list)
+    affected_missions_count: int = 0
+    violated_constraints_count: int = 0
+    is_existing: bool = False
+    correlation_id: Optional[str] = None
+    data_provenance: str = "DERIVED"
+
+
+class IncidentContextView(BaseModel):
+    """Contextual representation of an operational incident for Control Tower."""
+    incident_id: uuid.UUID
+    incident_code: str
+    title: str
+    severity: str
+    status: str
+    incident_type: str
+    location_id: Optional[uuid.UUID] = None
+    location_code: Optional[str] = None
+    location_name: Optional[str] = None
+    asset_id: Optional[uuid.UUID] = None
+    asset_code: Optional[str] = None
+    expedition_id: Optional[uuid.UUID] = None
+    detected_at: datetime
+    description: Optional[str] = None
+    propagation_summary: str = ""
+    propagations_count: int = 0
+    affected_entities: List[Dict[str, Any]] = Field(default_factory=list)
+    affected_missions: List[Dict[str, Any]] = Field(default_factory=list)
+    affected_constraints: List[Dict[str, Any]] = Field(default_factory=list)
+    affected_entities_count: int = 0
+    affected_missions_count: int = 0
+    violated_constraints_count: int = 0
+    replan_id: Optional[uuid.UUID] = None
+    replan_code: Optional[str] = None
+    correlation_id: Optional[Union[str, uuid.UUID]] = None
+    data_provenance: str = "DERIVED"
 

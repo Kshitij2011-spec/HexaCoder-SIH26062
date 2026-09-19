@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { ProvenanceTag } from '../../components/shared/ProvenanceTag';
 import { LoadingSkeleton } from '../../components/shared/LoadingSkeleton';
@@ -7,6 +8,7 @@ import { EmptyState } from '../../components/shared/EmptyState';
 import { useControlTowerOverview } from './hooks/useControlTower';
 import { ExpeditionContextBar } from './components/ExpeditionContextBar';
 import { ScenarioCockpitBanner } from './components/ScenarioCockpitBanner';
+import { IncidentEscalationBanner } from './components/IncidentEscalationBanner';
 import { MissionReadinessGrid } from './components/MissionReadinessGrid';
 import { ActiveConstraintsFeed } from './components/ActiveConstraintsFeed';
 import { DecisionQueuePanel } from './components/DecisionQueuePanel';
@@ -55,6 +57,24 @@ export function ControlTowerPage() {
       setSelectedExpeditionId(overview.expeditions[0].expedition_id);
     }
   }, [overview, selectedExpeditionId]);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlIncidentId = searchParams.get('incidentId');
+  const urlReplanId = searchParams.get('replanId');
+
+  const handleDismissIncidentContext = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('incidentId');
+    nextParams.delete('replanId');
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleExploreIncidentOptions = (targetReplanId: string) => {
+    setOptionsExplorerState({
+      isOpen: true,
+      replanId: targetReplanId,
+    });
+  };
 
   const activeExpeditionId =
     selectedExpeditionId ??
@@ -143,6 +163,16 @@ export function ControlTowerPage() {
             expeditions={overview.expeditions}
             isLoadingExpeditions={isLoading}
           />
+
+          {/* Incident Escalation Context Banner (A7) */}
+          {urlIncidentId && urlReplanId && (
+            <IncidentEscalationBanner
+              incidentId={urlIncidentId}
+              replanId={urlReplanId}
+              onExploreOptions={handleExploreIncidentOptions}
+              onDismiss={handleDismissIncidentContext}
+            />
+          )}
 
           {/* Polar Disruption Scenario Injection Cockpit */}
           <ScenarioCockpitBanner expeditionId={activeExpeditionId} />

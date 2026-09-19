@@ -18,8 +18,12 @@ from backend.app.domains.control_tower.schemas import (
     ConsequentialActionItem,
     ScenarioInjectRequest,
     ScenarioInjectResult,
+    IncidentEscalationRequest,
+    IncidentEscalationResult,
+    IncidentContextView,
 )
 from backend.app.domains.control_tower.scenarios import ScenarioInjectionService
+from backend.app.domains.control_tower.incident_escalation import IncidentEscalationService
 from backend.app.shared.schemas.envelope import (
     ApiResponse,
     PaginationMeta,
@@ -221,6 +225,78 @@ def inject_operational_scenario(
     result = service.inject(payload)
     return create_success_response(
         data=result,
+        correlation_id=request.headers.get("X-Request-ID") if request else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Incident Escalation Bridge Endpoints (A7)
+# ---------------------------------------------------------------------------
+
+@router.post("/incidents/{incident_id}/escalate", response_model=ApiResponse[IncidentEscalationResult])
+def escalate_incident_to_replan(
+    incident_id: uuid.UUID,
+    payload: Optional[IncidentEscalationRequest] = None,
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Escalates an active operational incident to Control Tower replanning.
+    Calculates downstream blast-radius, identifies impacted missions and violated constraints,
+    and idempotently creates or retrieves an incident-linked replan (REQUESTED state).
+    Strictly preserves human governance: does NOT approve or apply.
+    """
+    service = IncidentEscalationService(db)
+    cid_header = request.headers.get("X-Request-ID") if request else None
+    actor_header = request.headers.get("X-Actor-ID") if request else None
+    cid = None
+    if payload and payload.correlation_id:
+        cid = payload.correlation_id
+    elif cid_header:
+        try:
+            cid = uuid.UUID(cid_header)
+        except ValueError:
+            cid = None
+
+    actor_id = None
+    if payload and payload.requested_by:
+        actor_id = payload.requested_by
+    elif actor_header:
+        try:
+            actor_id = uuid.UUID(actor_header)
+        except ValueError:
+            actor_id = None
+
+    expedition_id = payload.expedition_id if payload else None
+    depth = payload.depth if payload else 3
+
+    result = service.escalate_incident(
+        incident_id=incident_id,
+        expedition_id=expedition_id,
+        requested_by=actor_id,
+        depth=depth,
+        correlation_id=cid,
+    )
+    return create_success_response(
+        data=result,
+        correlation_id=result.correlation_id or cid_header,
+    )
+
+
+@router.get("/incidents/{incident_id}/context", response_model=ApiResponse[IncidentContextView])
+def get_incident_escalation_context(
+    incident_id: uuid.UUID,
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns rich operational context for an escalated incident to display
+    in the Control Tower escalation context banner.
+    """
+    service = IncidentEscalationService(db)
+    context = service.get_incident_context(incident_id)
+    return create_success_response(
+        data=context,
         correlation_id=request.headers.get("X-Request-ID") if request else None,
     )
 
