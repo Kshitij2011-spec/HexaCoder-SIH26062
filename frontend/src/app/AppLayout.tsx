@@ -1,5 +1,9 @@
 import { NavLink } from 'react-router-dom';
-import { MapPin, Package, Truck, Activity, Boxes, Wrench, AlertOctagon } from 'lucide-react';
+import { MapPin, Package, Truck, Activity, Boxes, Wrench, AlertOctagon, Radio } from 'lucide-react';
+
+const COMMAND_NAV_ITEMS = [
+  { to: '/control-tower', label: 'Control Tower', Icon: Radio },
+];
 
 const LOGISTICS_NAV_ITEMS = [
   { to: '/locations', label: 'Locations',  Icon: MapPin  },
@@ -40,6 +44,37 @@ export function AppLayout({ children }: Props) {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto" aria-label="Workspaces">
+          <div>
+            <p className="px-2 mb-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest">
+              Command
+            </p>
+            <div className="space-y-1">
+              {COMMAND_NAV_ITEMS.map(({ to, label, Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                      isActive
+                        ? 'bg-cyan-900/40 text-cyan-300 border border-cyan-800/60'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon
+                        className={`w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-slate-500'}`}
+                        aria-hidden="true"
+                      />
+                      {label}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+
           <div>
             <p className="px-2 mb-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest">
               Logistics

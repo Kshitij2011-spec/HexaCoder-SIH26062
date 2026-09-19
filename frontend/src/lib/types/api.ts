@@ -623,3 +623,249 @@ export interface TimelineResponse {
   related_entities_included: boolean;
 }
 
+// ─── Operational Control Tower Domain (A4) ──────────────────────────────────
+
+export type ReadinessState = 'READY' | 'AT_RISK' | 'BLOCKED' | 'UNKNOWN';
+
+export type ConstraintState = 'SATISFIED' | 'VIOLATED' | 'NOT_EVALUABLE';
+
+export interface OperationalEventFeedItem {
+  event_id: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
+  previous_state?: string | null;
+  new_state?: string | null;
+  occurred_at: string;
+  source: string;
+  actor_type?: string | null;
+  actor_id?: string | null;
+  location_id?: string | null;
+  correlation_id?: string | null;
+  evidence: Record<string, unknown>;
+  data_provenance: string;
+}
+
+export interface ControlTowerConstraintItem {
+  constraint_id: string;
+  code: string;
+  name: string;
+  type: string;
+  rule_code: string;
+  subject_type: string;
+  subject_id: string;
+  subject_code?: string | null;
+  hard_or_soft: 'HARD' | 'SOFT' | string;
+  severity: string;
+  state: ConstraintState;
+  reason: string;
+  evidence: Record<string, unknown>;
+  data_provenance: string;
+}
+
+export interface MissionOperationsItem {
+  mission_id: string;
+  code: string;
+  title: string;
+  status: string;
+  priority: number;
+  type: string;
+  required_by_at?: string | null;
+  location_id?: string | null;
+  readiness_state: ReadinessState;
+  readiness_blockers: Record<string, unknown>[];
+  warnings: Record<string, unknown>[];
+  unknown_requirements: Record<string, unknown>[];
+  violated_constraints: Record<string, unknown>[];
+  pending_replans: Record<string, unknown>[];
+  latest_event?: OperationalEventFeedItem | null;
+  data_provenance: string;
+}
+
+export interface ExpeditionControlSummary {
+  expedition_id: string;
+  code: string;
+  name: string;
+  season: string;
+  lifecycle_status: string;
+  readiness_state: ReadinessState;
+  total_missions: number;
+  ready_missions_count: number;
+  at_risk_missions_count: number;
+  blocked_missions_count: number;
+  active_incidents_count: number;
+  active_hard_constraint_violations_count: number;
+  pending_replans_count: number;
+  pending_approvals_count: number;
+  latest_events: OperationalEventFeedItem[];
+  blockers: Record<string, unknown>[];
+  warnings: Record<string, unknown>[];
+  unknown_requirements: Record<string, unknown>[];
+  data_provenance: string;
+  generated_at: string;
+}
+
+export interface ControlTowerOverview {
+  total_expeditions: number;
+  expeditions: ExpeditionControlSummary[];
+  total_missions: number;
+  missions_by_readiness: Record<string, number>;
+  missions_by_status: Record<string, number>;
+  active_incidents_count: number;
+  critical_constraints_violated_count: number;
+  pending_replans_count: number;
+  pending_recommendations_count: number;
+  pending_approvals_count: number;
+  offline_sync_summary: Record<string, unknown>;
+  recent_operational_events: OperationalEventFeedItem[];
+  data_provenance: string;
+  generated_at: string;
+}
+
+export interface DecisionReplanItem {
+  replan_id: string;
+  replan_code: string;
+  expedition_id: string;
+  mission_id?: string | null;
+  status: string;
+  trigger_mode: string;
+  trigger_reason?: string | null;
+  what_changed: string;
+  affected_entities_count: number;
+  violated_constraints_count: number;
+  created_at: string;
+}
+
+export interface DecisionRecommendationItem {
+  recommendation_id: string;
+  replan_id: string;
+  option_id?: string | null;
+  title: string;
+  summary?: string | null;
+  status: string;
+  approval_state: string;
+  what_is_affected: Record<string, unknown>[];
+  rationale: string[];
+  proposed_changes: Record<string, unknown>[];
+  created_at: string;
+}
+
+export interface DecisionApprovalItem {
+  approval_id: string;
+  recommendation_id: string;
+  replan_id?: string | null;
+  recommendation_title: string;
+  status: string;
+  required_approver_role: string;
+  what_changed: string;
+  why_it_matters: string;
+  what_constraint_is_involved: string;
+  available_options_count: number;
+  created_at: string;
+}
+
+export interface DecisionQueueSummary {
+  expedition_id?: string | null;
+  total_pending_replans: number;
+  total_pending_recommendations: number;
+  total_pending_approvals: number;
+  pending_replans: DecisionReplanItem[];
+  pending_recommendations: DecisionRecommendationItem[];
+  pending_approvals: DecisionApprovalItem[];
+  data_provenance: string;
+  generated_at: string;
+}
+
+export interface ConsequentialActionItem {
+  approval_id: string;
+  recommendation_id: string;
+  replan_id?: string | null;
+  decision?: string | null;
+  approver_person_id: string;
+  approver_role?: string | null;
+  comment?: string | null;
+  decided_at?: string | null;
+  action_summary: string;
+  applied_changes: Record<string, unknown>[];
+  resulting_event_id?: string | null;
+  correlation_id?: string | null;
+  created_at: string;
+  data_provenance: string;
+}
+
+// ─── Replanning & Human Governance Domain (A3) ──────────────────────────────
+
+export type RecommendationStatus =
+  | 'PROPOSED'
+  | 'SELECTED'
+  | 'REJECTED'
+  | 'EXPIRED'
+  | 'APPLIED'
+  | 'FAILED';
+
+export interface RecommendationRead {
+  id: string;
+  replan_id: string;
+  option_id?: string | null;
+  trigger_event_id?: string | null;
+  title: string;
+  summary?: string | null;
+  rationale: string[];
+  supporting_evidence: Record<string, unknown>;
+  constraint_evaluation_summary: Record<string, unknown>;
+  affected_entities: unknown[];
+  violated_constraints: unknown[];
+  proposed_changes: unknown[];
+  expected_impact: Record<string, unknown>;
+  assumptions: string[];
+  status: RecommendationStatus | string;
+  approval_state: ApprovalState | string;
+  data_provenance: string;
+  generated_at: string;
+  created_at: string;
+}
+
+export type ApprovalState = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
+
+export type ApprovalStatus = ApprovalState;
+
+export type ApprovalDecision = 'APPROVED' | 'REJECTED';
+
+export interface ApprovalDecisionRequest {
+  approver_person_id: string;
+  approver_role?: string | null;
+  decision: ApprovalDecision;
+  comment?: string | null;
+  correlation_id?: string | null;
+}
+
+export interface ApprovalRead {
+  id: string;
+  recommendation_id: string;
+  approver_user_id?: string | null;
+  approver_person_id: string;
+  approver_role?: string | null;
+  decision?: string | null;
+  comment?: string | null;
+  status: string;
+  decided_at?: string | null;
+  resulting_event_id?: string | null;
+  correlation_id?: string | null;
+  created_at: string;
+}
+
+export interface ReplanApplyRequest {
+  actor_person_id: string;
+  comment?: string | null;
+  correlation_id?: string | null;
+}
+
+export interface ReplanApplyResult {
+  recommendation_id: string;
+  status: string;
+  applied_changes: Record<string, unknown>[];
+  resulting_event_id?: string | null;
+  applied_at: string;
+  message: string;
+}
+
