@@ -35,6 +35,25 @@ from backend.app.shared.schemas.envelope import (
 router = APIRouter(tags=["Operational Control Tower"])
 
 
+@router.get("/overview/fast", response_model=ApiResponse[ControlTowerOverview])
+def get_control_tower_overview_fast(
+    expedition_id: Optional[uuid.UUID] = Query(None, description="Filter overview to a single expedition"),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    High-performance initial Control Tower command posture endpoint.
+    Aggregates active campaigns, mission rollups, active incidents, critical constraints,
+    pending replans/approvals, and offline sync in <=8 batched queries without deep recursive sweeps.
+    """
+    service = ControlTowerService(db)
+    overview = service.get_fast_overview(expedition_id=expedition_id)
+    return create_success_response(
+        data=overview,
+        correlation_id=request.headers.get("X-Request-ID") if request else None,
+    )
+
+
 @router.get("/overview", response_model=ApiResponse[ControlTowerOverview])
 def get_control_tower_overview(
     expedition_id: Optional[uuid.UUID] = Query(None, description="Filter overview to a single expedition"),

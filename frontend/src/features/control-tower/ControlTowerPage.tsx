@@ -5,7 +5,7 @@ import { ProvenanceTag } from '../../components/shared/ProvenanceTag';
 import { LoadingSkeleton } from '../../components/shared/LoadingSkeleton';
 import { ErrorDisplay } from '../../components/shared/ErrorDisplay';
 import { EmptyState } from '../../components/shared/EmptyState';
-import { useControlTowerOverview } from './hooks/useControlTower';
+import { useControlTowerFastOverview } from './hooks/useControlTower';
 import { ExpeditionContextBar } from './components/ExpeditionContextBar';
 import { ScenarioCockpitBanner } from './components/ScenarioCockpitBanner';
 import { IncidentEscalationBanner } from './components/IncidentEscalationBanner';
@@ -38,7 +38,7 @@ interface InitiateModalState {
 }
 
 export function ControlTowerPage() {
-  const { data: overview, isLoading, error } = useControlTowerOverview();
+  const { data: overview, isLoading, error } = useControlTowerFastOverview();
   const [selectedExpeditionId, setSelectedExpeditionId] = useState<string | null>(null);
 
   // Modal states for closed-loop operational workflows
@@ -220,6 +220,18 @@ export function ControlTowerPage() {
             onOpenDrawer={() => setIsSyncDrawerOpen(true)}
           />
 
+          {/* Mission Readiness Grid & Operations */}
+          <MissionReadinessGrid
+            expeditionId={activeExpeditionId}
+            onInitiateReplan={handleInitiateMissionReplan}
+          />
+
+          {/* Active Constraints & Invariants */}
+          <ActiveConstraintsFeed
+            expeditionId={activeExpeditionId}
+            onInitiateReplanForConstraint={handleInitiateConstraintReplan}
+          />
+
           {/* Polar Utility & Consumables Runway Engine (A9) */}
           <ResourceRunwayPanel
             expeditionId={activeExpeditionId}
@@ -232,12 +244,6 @@ export function ControlTowerPage() {
             onInitiateReplan={handleInitiatePersonnelReplan}
           />
 
-          {/* Mission Readiness Grid & Operations */}
-          <MissionReadinessGrid
-            expeditionId={activeExpeditionId}
-            onInitiateReplan={handleInitiateMissionReplan}
-          />
-
           {/* Decision Queue & Human Governance Boundary */}
           <DecisionQueuePanel
             expeditionId={activeExpeditionId}
@@ -245,12 +251,6 @@ export function ControlTowerPage() {
             onViewReplanOptions={(replanId) =>
               setOptionsExplorerState({ isOpen: true, replanId })
             }
-          />
-
-          {/* Active Constraints & Invariants */}
-          <ActiveConstraintsFeed
-            expeditionId={activeExpeditionId}
-            onInitiateReplanForConstraint={handleInitiateConstraintReplan}
           />
 
           {/* Operational Events Chronological Ledger */}

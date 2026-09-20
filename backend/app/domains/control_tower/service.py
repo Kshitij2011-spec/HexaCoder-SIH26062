@@ -82,7 +82,257 @@ class ControlTowerService:
         self.personnel_safety_service = PersonnelSafetyService(session)
 
     # -----------------------------------------------------------------------
-    # 1. Global Overview
+    # 1. Global Fast Overview (Shell & Command Posture)
+    # -----------------------------------------------------------------------
+
+    def get_fast_overview(self, expedition_id: Optional[uuid.UUID] = None) -> ControlTowerOverview:
+        """
+        Builds a high-efficiency operational posture for immediate Control Tower shell rendering.
+        Uses batched and aggregated queries (<=7 queries total) without executing
+        recursive readiness evaluators, consumable runways, or personnel safety deep sweeps.
+        """
+        now = datetime.now(timezone.utc)
+
+        # 1. Expeditions list (1 query)
+        exp_stmt = select(ExpeditionModel)
+        if expedition_id:
+            exp_stmt = exp_stmt.where(ExpeditionModel.id == expedition_id)
+        expeditions = list(self.session.execute(exp_stmt.order_by(ExpeditionModel.code.asc())).scalars().all())
+
+        # 2. Mission counts grouped by expedition and status (1 query)
+        m_stmt = (
+            select(MissionModel.expedition_id, MissionModel.status, func.count(MissionModel.id))
+            .group_by(MissionModel.expedition_id, MissionModel.status)
+        )
+        if expedition_id:
+            m_stmt = m_stmt.where(MissionModel.expedition_id == expedition_id)
+        mission_rows = self.session.execute(m_stmt).all()
+
+        # 3. Active incidents grouped by expedition (1 query)
+        inc_stmt = (
+            select(IncidentModel.expedition_id, func.count(IncidentModel.id))
+            .where(IncidentModel.status.notin_(["RESOLVED", "CLOSED"]))
+            .group_by(IncidentModel.expedition_id)
+        )
+        if expedition_id:
+            inc_stmt = inc_stmt.where(IncidentModel.expedition_id == expedition_id)
+        inc_counts_by_exp = dict(self.session.execute(inc_stmt).all())
+
+        # 4. Pending replans grouped by expedition (1 query)
+        pending_replan_statuses = [
+            ReplanStatus.REQUESTED.value,
+            ReplanStatus.ANALYZING.value,
+            ReplanStatus.OPTIONS_READY.value,
+            ReplanStatus.AWAITING_APPROVAL.value,
+        ]
+        r_stmt = (
+            select(ReplanModel.expedition_id, func.count(ReplanModel.id))
+            .where(ReplanModel.status.in_(pending_replan_statuses))
+            .group_by(ReplanModel.expedition_id)
+        )
+        if expedition_id:
+            r_stmt = r_stmt.where(ReplanModel.expedition_id == expedition_id)
+        replan_counts_by_exp = dict(self.session.execute(r_stmt).all())
+
+        # 5. Combined scalar counts: hard constraints, pending recs, pending approvals (1 query)
+        if expedition_id:
+            m_ids_subq = select(MissionModel.id).where(MissionModel.expedition_id == expedition_id)
+            hc_subq = select(func.count(ConstraintModel.id)).where(
+                ConstraintModel.active.is_(True),
+                ConstraintModel.hard_or_soft == "HARD",
+                or_(
+                    ConstraintModel.subject_id == expedition_id,
+                    ConstraintModel.subject_id.in_(m_ids_subq),
+                    ConstraintModel.subject_id.is_(None),
+                ),
+            ).scalar_subquery()
+            rec_subq = (
+                select(func.count(RecommendationModel.id))
+                .join(ReplanModel, RecommendationModel.replan_id == ReplanModel.id)
+                .where(
+                    RecommendationModel.status.in_([RecommendationStatus.PROPOSED.value, RecommendationStatus.SELECTED.value]),
+                    ReplanModel.expedition_id == expedition_id,
+                )
+                .scalar_subquery()
+            )
+            appr_subq = (
+                select(func.count(ApprovalModel.id))
+                .join(RecommendationModel, ApprovalModel.recommendation_id == RecommendationModel.id)
+                .join(ReplanModel, RecommendationModel.replan_id == ReplanModel.id)
+                .where(
+                    ApprovalModel.status == ApprovalStatus.PENDING.value,
+                    ReplanModel.expedition_id == expedition_id,
+                )
+                .scalar_subquery()
+            )
+        else:
+            hc_subq = select(func.count(ConstraintModel.id)).where(
+                ConstraintModel.active.is_(True),
+                ConstraintModel.hard_or_soft == "HARD",
+            ).scalar_subquery()
+            rec_subq = select(func.count(RecommendationModel.id)).where(
+                RecommendationModel.status.in_([RecommendationStatus.PROPOSED.value, RecommendationStatus.SELECTED.value])
+            ).scalar_subquery()
+            appr_subq = select(func.count(ApprovalModel.id)).where(
+                ApprovalModel.status == ApprovalStatus.PENDING.value
+            ).scalar_subquery()
+
+        crit_hard_count, pending_recs, pending_approvals = self.session.execute(
+            select(hc_subq, rec_subq, appr_subq)
+        ).one()
+
+        # 6. Offline sync summary (1 query)
+        sync_counts = dict(
+            self.session.execute(
+                select(OfflineOperationModel.status, func.count(OfflineOperationModel.id)).group_by(
+                    OfflineOperationModel.status
+                )
+            ).all()
+        )
+
+        # 7. Recent operational events (1 query, 10 events max)
+        ev_stmt = (
+            select(OperationalEventModel)
+            .order_by(OperationalEventModel.occurred_at.desc())
+            .limit(10)
+        )
+        if expedition_id:
+            ev_stmt = ev_stmt.where(
+                or_(
+                    OperationalEventModel.entity_id == expedition_id,
+                    OperationalEventModel.location_id.isnot(None),
+                )
+            )
+        event_models = self.session.execute(ev_stmt).scalars().all()
+        recent_events = [
+            OperationalEventFeedItem(
+                event_id=ev.event_id,
+                event_type=ev.event_type,
+                entity_type=ev.entity_type,
+                entity_id=ev.entity_id,
+                previous_state=ev.previous_state,
+                new_state=ev.new_state,
+                occurred_at=ev.occurred_at,
+                source=ev.source,
+                actor_type=ev.actor_type,
+                actor_id=ev.actor_id,
+                location_id=ev.location_id,
+                correlation_id=ev.correlation_id,
+                evidence=ev.evidence or {},
+                data_provenance=getattr(ev, "data_provenance", "DERIVED") or "DERIVED",
+            )
+            for ev in event_models
+        ]
+
+        # Process mission rollups
+        total_missions = 0
+        missions_by_status: Dict[str, int] = {}
+        missions_by_readiness: Dict[str, int] = {
+            ReadinessState.READY.value: 0,
+            ReadinessState.AT_RISK.value: 0,
+            ReadinessState.BLOCKED.value: 0,
+            "UNKNOWN": 0,
+        }
+        exp_mission_stats: Dict[uuid.UUID, Dict[str, int]] = {}
+
+        for exp_id, status, count in mission_rows:
+            total_missions += count
+            status_key = status or "UNKNOWN"
+            missions_by_status[status_key] = missions_by_status.get(status_key, 0) + count
+
+            s_upper = status_key.upper()
+            if s_upper in ("READY", "COMPLETED"):
+                readiness_key = ReadinessState.READY.value
+            elif s_upper in ("BLOCKED", "CANCELLED", "ABORTED"):
+                readiness_key = ReadinessState.BLOCKED.value
+            elif s_upper in ("AT_RISK", "DELAYED", "SUSPENDED"):
+                readiness_key = ReadinessState.AT_RISK.value
+            else:
+                readiness_key = "UNKNOWN"
+            missions_by_readiness[readiness_key] += count
+
+            if exp_id not in exp_mission_stats:
+                exp_mission_stats[exp_id] = {
+                    "total": 0,
+                    "ready": 0,
+                    "at_risk": 0,
+                    "blocked": 0,
+                }
+            exp_mission_stats[exp_id]["total"] += count
+            if readiness_key == ReadinessState.READY.value:
+                exp_mission_stats[exp_id]["ready"] += count
+            elif readiness_key == ReadinessState.BLOCKED.value:
+                exp_mission_stats[exp_id]["blocked"] += count
+            elif readiness_key == ReadinessState.AT_RISK.value:
+                exp_mission_stats[exp_id]["at_risk"] += count
+
+        # Build ExpeditionControlSummary items
+        expedition_summaries = []
+        for exp in expeditions:
+            stats = exp_mission_stats.get(exp.id, {"total": 0, "ready": 0, "at_risk": 0, "blocked": 0})
+            exp_incidents = inc_counts_by_exp.get(exp.id, 0)
+            exp_replans = replan_counts_by_exp.get(exp.id, 0)
+
+            if stats["blocked"] > 0:
+                exp_readiness = ReadinessState.BLOCKED.value
+            elif stats["at_risk"] > 0:
+                exp_readiness = ReadinessState.AT_RISK.value
+            elif stats["ready"] > 0:
+                exp_readiness = ReadinessState.READY.value
+            else:
+                exp_readiness = "UNKNOWN"
+
+            exp_events = [ev for ev in recent_events if ev.entity_id == exp.id][:5]
+
+            expedition_summaries.append(
+                ExpeditionControlSummary(
+                    expedition_id=exp.id,
+                    code=exp.code,
+                    name=exp.name,
+                    season=exp.season,
+                    lifecycle_status=getattr(exp, "status", "ACTIVE") or "ACTIVE",
+                    readiness_state=exp_readiness,
+                    total_missions=stats["total"],
+                    ready_missions_count=stats["ready"],
+                    at_risk_missions_count=stats["at_risk"],
+                    blocked_missions_count=stats["blocked"],
+                    active_incidents_count=exp_incidents,
+                    active_hard_constraint_violations_count=crit_hard_count if expedition_id else 0,
+                    pending_replans_count=exp_replans,
+                    pending_approvals_count=pending_approvals if expedition_id else 0,
+                    latest_events=exp_events,
+                    blockers=[],
+                    warnings=[],
+                    unknown_requirements=[],
+                    data_provenance="DERIVED",
+                    generated_at=now,
+                )
+            )
+
+        total_active_incidents = sum(inc_counts_by_exp.values())
+        total_pending_replans = sum(replan_counts_by_exp.values())
+
+        return ControlTowerOverview(
+            total_expeditions=len(expedition_summaries),
+            expeditions=expedition_summaries,
+            total_missions=total_missions,
+            missions_by_readiness=missions_by_readiness,
+            missions_by_status=missions_by_status,
+            active_incidents_count=total_active_incidents,
+            critical_constraints_violated_count=crit_hard_count or 0,
+            pending_replans_count=total_pending_replans,
+            pending_recommendations_count=pending_recs or 0,
+            pending_approvals_count=pending_approvals or 0,
+            offline_sync_summary=sync_counts,
+            recent_operational_events=recent_events,
+            resource_runway_summary=None,
+            personnel_safety_summary=None,
+            data_provenance="DERIVED",
+            generated_at=now,
+        )
+
+    # -----------------------------------------------------------------------
+    # 2. Comprehensive Global Overview (Backward Compatible Deep Aggregator)
     # -----------------------------------------------------------------------
 
     def get_overview(self, expedition_id: Optional[uuid.UUID] = None) -> ControlTowerOverview:
@@ -99,8 +349,11 @@ class ControlTowerService:
         expeditions = list(self.session.execute(exp_stmt.order_by(ExpeditionModel.code.asc())).scalars().all())
 
         expedition_summaries = []
+        mission_readiness_cache: Dict[uuid.UUID, str] = {}
         for exp in expeditions:
-            expedition_summaries.append(self.get_expedition_summary(exp.id))
+            expedition_summaries.append(
+                self.get_expedition_summary(exp.id, mission_readiness_cache=mission_readiness_cache)
+            )
 
         # 2. Missions Aggregate
         m_stmt = select(MissionModel)
@@ -118,9 +371,12 @@ class ControlTowerService:
 
         for m in all_missions:
             status_counts[m.status] = status_counts.get(m.status, 0) + 1
-            # Derive readiness using mission readiness service
-            r_res = self.mission_readiness.evaluate(m.id)
-            state_val = r_res.state.value if hasattr(r_res.state, "value") else str(r_res.state)
+            if m.id in mission_readiness_cache:
+                state_val = mission_readiness_cache[m.id]
+            else:
+                r_res = self.mission_readiness.evaluate(m.id)
+                state_val = r_res.state.value if hasattr(r_res.state, "value") else str(r_res.state)
+                mission_readiness_cache[m.id] = state_val
             readiness_counts[state_val] = readiness_counts.get(state_val, 0) + 1
 
         # 3. Active Incidents (status not in RESOLVED, CLOSED)
@@ -275,7 +531,11 @@ class ControlTowerService:
     # 2. Expedition Summary
     # -----------------------------------------------------------------------
 
-    def get_expedition_summary(self, expedition_id: uuid.UUID) -> ExpeditionControlSummary:
+    def get_expedition_summary(
+        self,
+        expedition_id: uuid.UUID,
+        mission_readiness_cache: Optional[Dict[uuid.UUID, str]] = None,
+    ) -> ExpeditionControlSummary:
         """Evaluates and rolls up a single expedition's operational posture."""
         exp = self.expedition_repo.get_by_id(expedition_id)
         if not exp:
@@ -284,6 +544,11 @@ class ControlTowerService:
         now = datetime.now(timezone.utc)
         readiness_res = self.expedition_readiness.evaluate(expedition_id)
         state_str = readiness_res.state.value if hasattr(readiness_res.state, "value") else str(readiness_res.state)
+
+        if mission_readiness_cache is not None:
+            for ms in getattr(readiness_res, "mission_summaries", []):
+                ms_val = ms.state.value if hasattr(ms.state, "value") else str(ms.state)
+                mission_readiness_cache[ms.mission_id] = ms_val
 
         # Active incidents for expedition
         inc_count = (
