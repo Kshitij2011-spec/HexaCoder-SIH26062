@@ -1,5 +1,5 @@
 /**
- * Shared TypeScript types mirroring the PolarOps backend Pydantic schemas.
+ * Shared TypeScript types mirroring the CRYOS backend Pydantic schemas.
  * Source of truth: backend/app/shared/types/states.py and domain schemas.
  * DO NOT invent fields not present in the backend response.
  */

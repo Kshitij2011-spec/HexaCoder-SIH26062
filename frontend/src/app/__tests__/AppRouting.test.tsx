@@ -74,6 +74,7 @@ describe('App Routing Integration', () => {
     const controlTowerNavLink = screen.getByRole('link', { name: /control tower/i });
     expect(controlTowerNavLink).toBeInTheDocument();
     expect(controlTowerNavLink).toHaveAttribute('href', '/control-tower');
+    expect(screen.getByText('CRYOS')).toBeInTheDocument();
   });
 
   it('preserves existing Track B routes (e.g. /locations)', async () => {

@@ -1,6 +1,7 @@
-# HEXACODERS — SIH26062
+# CRYOS — Polar Expedition Logistics Platform
 
-## Integrated Polar Expedition Logistics and Asset Management System
+### HEXACODERS — SIH26062
+#### Integrated Polar Expedition Logistics and Asset Management System
 
 An operational decision support platform for polar expeditions in which changes to logistics, assets, cargo, or personnel are propagated across dependencies, validated against operational constraints, and resolved through human-approved updates.
 

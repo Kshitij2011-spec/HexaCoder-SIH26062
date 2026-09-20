@@ -1,5 +1,5 @@
 /**
- * Shared API client for PolarOps frontend.
+ * Shared API client for CRYOS frontend.
  * - Uses fetch (no axios).
  * - Base URL from VITE_API_BASE_URL env var.
  * - Parses the ApiResponse envelope.

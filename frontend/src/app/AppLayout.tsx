@@ -39,7 +39,7 @@ export function AppLayout({ children }: Props) {
           <div className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-cyan-400" aria-hidden="true" />
             <span className="font-semibold text-slate-100 tracking-tight text-sm">
-              PolarOps
+              CRYOS
             </span>
           </div>
           <p className="text-[10px] text-slate-500 font-mono mt-0.5 uppercase tracking-widest">
