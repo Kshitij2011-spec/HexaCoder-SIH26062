@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { MapPin, Package, Truck, Activity, Boxes, Wrench, AlertOctagon, Radio } from 'lucide-react';
+import { OfflineSyncIndicator } from '../features/control-tower/components/OfflineSyncIndicator';
+import { OfflineSyncDrawer } from '../features/control-tower/components/OfflineSyncDrawer';
 
 const COMMAND_NAV_ITEMS = [
   { to: '/control-tower', label: 'Control Tower', Icon: Radio },
@@ -22,6 +25,8 @@ interface Props {
 }
 
 export function AppLayout({ children }: Props) {
+  const [isSyncDrawerOpen, setIsSyncDrawerOpen] = useState(false);
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950">
       {/* Sidebar */}
@@ -150,7 +155,7 @@ export function AppLayout({ children }: Props) {
       <main className="flex-1 overflow-auto">
         {/* Top bar */}
         <header className="sticky top-0 z-10 px-6 py-3 border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm flex items-center justify-between">
-          <div />
+          <OfflineSyncIndicator onOpenDrawer={() => setIsSyncDrawerOpen(true)} />
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-500 font-mono">
               Antarctic Expedition Logistics Platform
@@ -161,6 +166,12 @@ export function AppLayout({ children }: Props) {
         <div className="px-6 py-6">
           {children}
         </div>
+
+        {/* Platform-wide Offline Sync Drawer */}
+        <OfflineSyncDrawer
+          isOpen={isSyncDrawerOpen}
+          onClose={() => setIsSyncDrawerOpen(false)}
+        />
       </main>
     </div>
   );

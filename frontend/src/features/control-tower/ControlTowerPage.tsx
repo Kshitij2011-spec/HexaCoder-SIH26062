@@ -17,6 +17,9 @@ import { ConsequentialAuditTimeline } from './components/ConsequentialAuditTimel
 import { InitiateReplanModal } from './components/InitiateReplanModal';
 import { MitigationOptionsExplorer } from './components/MitigationOptionsExplorer';
 import { ApprovalModal } from './components/ApprovalModal';
+import { OfflineSyncIndicator } from './components/OfflineSyncIndicator';
+import { OfflineSyncDrawer } from './components/OfflineSyncDrawer';
+import { OfflineSyncSection } from './components/OfflineSyncSection';
 import type { MissionOperationsItem, ControlTowerConstraintItem } from '../../lib/types/api';
 
 interface InitiateModalState {
@@ -50,6 +53,7 @@ export function ControlTowerPage() {
     isOpen: false,
     recommendationId: null,
   });
+  const [isSyncDrawerOpen, setIsSyncDrawerOpen] = useState(false);
 
   // Synchronize initial expedition selection with the overview response
   useEffect(() => {
@@ -121,6 +125,7 @@ export function ControlTowerPage() {
         subtitle="Operational command center & mission readiness posture"
         actions={
           <div className="flex items-center gap-3">
+            <OfflineSyncIndicator onOpenDrawer={() => setIsSyncDrawerOpen(true)} />
             <span className="text-xs font-mono text-slate-400">
               Campaigns: {overview?.total_expeditions ?? 0}
             </span>
@@ -176,6 +181,12 @@ export function ControlTowerPage() {
 
           {/* Polar Disruption Scenario Injection Cockpit */}
           <ScenarioCockpitBanner expeditionId={activeExpeditionId} />
+
+          {/* Store-and-Forward Offline Synchronization Posture (A8) */}
+          <OfflineSyncSection
+            expeditionId={activeExpeditionId}
+            onOpenDrawer={() => setIsSyncDrawerOpen(true)}
+          />
 
           {/* Mission Readiness Grid & Operations */}
           <MissionReadinessGrid
@@ -236,6 +247,12 @@ export function ControlTowerPage() {
               expeditionId={activeExpeditionId}
             />
           )}
+
+          {/* 4. Offline Synchronization Outbox Drawer (A8) */}
+          <OfflineSyncDrawer
+            isOpen={isSyncDrawerOpen}
+            onClose={() => setIsSyncDrawerOpen(false)}
+          />
         </>
       )}
     </div>

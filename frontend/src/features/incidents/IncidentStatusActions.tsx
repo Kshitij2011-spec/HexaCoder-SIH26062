@@ -8,6 +8,7 @@ import {
   useResolveIncident,
   useCloseIncident,
 } from './hooks/useIncidentMutations';
+import { useOfflineSync } from '../../lib/sync';
 import type { Incident } from '../../lib/types/api';
 
 interface Props {
@@ -16,6 +17,11 @@ interface Props {
 }
 
 export function IncidentStatusActions({ incident, onSuccess }: Props) {
+  const { operations } = useOfflineSync();
+  const queuedOp = operations.find(
+    (op) => op.entity_type === 'INCIDENT' && op.entity_id === incident.id && op.local_status === 'LOCAL_QUEUED'
+  );
+  const isLocalQueued = Boolean((incident as { _is_local_queued?: boolean })._is_local_queued || queuedOp);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => Promise<unknown>) | null>(null);
   const [dialogTitle, setDialogTitle] = useState('');
@@ -94,6 +100,23 @@ export function IncidentStatusActions({ incident, onSuccess }: Props) {
         </span>
         <span className="text-cyan-400 font-semibold">Current: {incident.status}</span>
       </div>
+
+      {isLocalQueued && (
+        <div
+          data-testid="local-queued-status-banner"
+          className="p-2.5 rounded bg-amber-950/70 border border-amber-500/80 text-amber-300 font-mono text-xs flex items-center justify-between gap-2"
+        >
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="font-semibold">LOCAL_QUEUED — FIELD BUFFERED [SYNTHETIC/DEMO]</span>
+          </div>
+          {queuedOp && (
+            <span className="text-[10px] text-amber-400/80 font-mono">
+              OP: {queuedOp.client_operation_id.slice(0, 8)}...
+            </span>
+          )}
+        </div>
+      )}
 
       {errorMessage && (
         <ErrorDisplay error={new Error(errorMessage)} title="Lifecycle Action Failed" />
