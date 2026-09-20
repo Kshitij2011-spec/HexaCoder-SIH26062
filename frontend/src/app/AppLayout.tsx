@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { MapPin, Package, Truck, Activity, Boxes, Wrench, AlertOctagon, Radio } from 'lucide-react';
 import { OfflineSyncIndicator } from '../features/control-tower/components/OfflineSyncIndicator';
 import { OfflineSyncDrawer } from '../features/control-tower/components/OfflineSyncDrawer';
+import { useVisitorSession } from '../lib/hooks/useVisitorSession';
 
 const COMMAND_NAV_ITEMS = [
   { to: '/control-tower', label: 'Control Tower', Icon: Radio },
@@ -26,6 +27,7 @@ interface Props {
 
 export function AppLayout({ children }: Props) {
   const [isSyncDrawerOpen, setIsSyncDrawerOpen] = useState(false);
+  useVisitorSession();
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950">

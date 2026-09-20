@@ -40,6 +40,18 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
 
+    # CORS Configuration
+    CORS_ORIGINS: str = ""
+
+    # Mailgun & Visitor Alert Settings
+    MAILGUN_API_KEY: Optional[str] = None
+    MAILGUN_DOMAIN: str = "sandboxd3ff4971473e4310b5ddc987a096bdd5.mailgun.org"
+    MAILGUN_FROM: str = "postmaster@sandboxd3ff4971473e4310b5ddc987a096bdd5.mailgun.org"
+    MAILGUN_RECIPIENT_EMAIL: str = "kshitijparkhe2011@gmail.com"
+    MAILGUN_API_URL: str = "https://api.mailgun.net/v3"
+    ALERT_COOLDOWN_MINUTES: int = 15
+    SESSION_TIMEOUT_MINUTES: int = 10
+
     def get_database_url(self) -> str:
         """Return canonical database URL."""
         if self.DATABASE_URL:

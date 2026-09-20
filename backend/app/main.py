@@ -20,6 +20,7 @@ from backend.app.shared.schemas.envelope import (
     create_error_response,
 )
 from backend.app.api.router import api_v1_router
+from backend.app.api.v1.endpoints.visitor import router as visitor_router
 
 logger = get_logger("platform.main")
 
@@ -37,9 +38,20 @@ app = FastAPI(
 )
 
 # CORS configuration for authorized frontend consumers
+allowed_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+]
+if settings.CORS_ORIGINS:
+    for origin in settings.CORS_ORIGINS.split(","):
+        cleaned = origin.strip()
+        if cleaned and cleaned not in allowed_origins:
+            allowed_origins.append(cleaned)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -180,6 +192,12 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 # Root Health Check Endpoints
 
+@app.head("/health", status_code=status.HTTP_200_OK, tags=["Health"])
+def health_head():
+    """Lightweight process/app health check returning HTTP 200 with no body for external uptime monitors."""
+    return Response(status_code=status.HTTP_200_OK)
+
+
 @app.get("/health", response_model=ApiResponse, tags=["Health"])
 def root_health(request: Request):
     """Root operational health check reporting service status and safe database reachability."""
@@ -187,7 +205,7 @@ def root_health(request: Request):
     overall_status = "HEALTHY" if db_health.get("status") == "HEALTHY" else "DEGRADED"
 
     health_info = {
-        "application": settings.PROJECT_NAME,
+        "application": "CRYOS",
         "environment": settings.ENVIRONMENT,
         "version": "1.0.0",
         "status": overall_status,
@@ -199,5 +217,6 @@ def root_health(request: Request):
     )
 
 
-# Mount versioned API v1 router
+# Mount versioned API v1 router and visitor alert router
 app.include_router(api_v1_router)
+app.include_router(visitor_router)
