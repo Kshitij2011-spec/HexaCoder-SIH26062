@@ -717,6 +717,7 @@ export interface ControlTowerOverview {
   pending_recommendations_count: number;
   pending_approvals_count: number;
   offline_sync_summary: Record<string, unknown>;
+  resource_runway_summary?: ResourceRunwaySummary | null;
   recent_operational_events: OperationalEventFeedItem[];
   data_provenance: string;
   generated_at: string;
@@ -994,4 +995,77 @@ export interface IncidentContextView {
   data_provenance: string;
 }
 
+// ─── Polar Utility & Consumables Runway Engine (A9) ─────────────────────────
 
+export type RunwayState =
+  | 'RESUPPLY_GAP'
+  | 'AT_RISK'
+  | 'COVERED'
+  | 'NO_INBOUND_SCHEDULED'
+  | 'NO_CONSUMPTION_OBSERVED';
+
+export interface BurnRateEvidence {
+  observations: number;
+  consumed_quantity: number;
+  elapsed_days: number;
+  window_days: number;
+  baseline_daily_burn_rate?: number | null;
+}
+
+export interface ResourceRunwayItem {
+  stock_lot_id: string;
+  inventory_item_id: string;
+  lot_code?: string | null;
+  item_code: string;
+  item_name: string;
+  category: string;
+  criticality: string;
+  unit: string;
+  location_id: string;
+  location_name?: string | null;
+
+  // Authoritative balances
+  on_hand_quantity: string;
+  reserved_quantity: string;
+  quarantined_quantity: string;
+  damaged_quantity: string;
+  available_quantity: string;
+
+  // Existing repository thresholds
+  reorder_point?: string | null;
+  replenishment_lead_days?: number | null;
+  reorder_buffer_days?: number | null;
+
+  // Burn rate & evidence
+  daily_burn_rate: string;
+  burn_rate_source: string;
+  burn_rate_evidence: Record<string, unknown>;
+
+  // Forecast projections
+  runway_days?: number | null;
+  exhaustion_at?: string | null;
+  next_inbound_at?: string | null;
+  resupply_gap_days: number;
+
+  // Deterministic runway state
+  runway_state: RunwayState;
+
+  // Contextual linkages
+  dependent_mission_id?: string | null;
+  dependent_asset_id?: string | null;
+  active_constraint_id?: string | null;
+
+  // Provenance
+  data_provenance: string;
+}
+
+export interface ResourceRunwaySummary {
+  expedition_id: string;
+  evaluated_at: string;
+  total_candidates: number;
+  items_with_resupply_gap: number;
+  items_at_risk: number;
+  minimum_runway_days?: number | null;
+  runways: ResourceRunwayItem[];
+  data_provenance: string;
+}

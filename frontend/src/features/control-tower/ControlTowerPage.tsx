@@ -20,7 +20,12 @@ import { ApprovalModal } from './components/ApprovalModal';
 import { OfflineSyncIndicator } from './components/OfflineSyncIndicator';
 import { OfflineSyncDrawer } from './components/OfflineSyncDrawer';
 import { OfflineSyncSection } from './components/OfflineSyncSection';
-import type { MissionOperationsItem, ControlTowerConstraintItem } from '../../lib/types/api';
+import { ResourceRunwayPanel } from './components/ResourceRunwayPanel';
+import type {
+  MissionOperationsItem,
+  ControlTowerConstraintItem,
+  ResourceRunwayItem,
+} from '../../lib/types/api';
 
 interface InitiateModalState {
   isOpen: boolean;
@@ -101,6 +106,20 @@ export function ControlTowerPage() {
       isOpen: true,
       constraintCode: constraint.code,
       reason: `Hard constraint violation detected for ${constraint.code}: ${constraint.reason}`,
+    });
+  };
+
+  const handleInitiateRunwayReplan = (item: ResourceRunwayItem) => {
+    setInitiateModalState({
+      isOpen: true,
+      missionId: item.dependent_mission_id,
+      reason: `Consumable runway deficit detected for ${item.item_name} (${item.item_code}): ${
+        item.resupply_gap_days > 0
+          ? `Resupply gap of ${item.resupply_gap_days.toFixed(1)} days prior to replenishment arrival.`
+          : item.runway_days != null
+          ? `Critically low runway (${item.runway_days.toFixed(1)} days remaining).`
+          : 'Stockout risk detected with no inbound replenishment scheduled.'
+      } Operational replanning requested.`,
     });
   };
 
@@ -186,6 +205,12 @@ export function ControlTowerPage() {
           <OfflineSyncSection
             expeditionId={activeExpeditionId}
             onOpenDrawer={() => setIsSyncDrawerOpen(true)}
+          />
+
+          {/* Polar Utility & Consumables Runway Engine (A9) */}
+          <ResourceRunwayPanel
+            expeditionId={activeExpeditionId}
+            onInitiateReplan={handleInitiateRunwayReplan}
           />
 
           {/* Mission Readiness Grid & Operations */}

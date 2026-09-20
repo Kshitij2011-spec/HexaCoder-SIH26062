@@ -958,6 +958,136 @@ def evaluate_time_window(
     )
 
 
+def evaluate_resource_runway_horizon(
+    session: Session,
+    constraint: ConstraintModel,
+    context: Optional[Dict[str, Any]] = None
+) -> ConstraintEvaluationResult:
+    """
+    Evaluates RESOURCE_RUNWAY_HORIZON: verifies consumable inventory runway
+    against inbound replenishment arrival and replenishment lead time buffers.
+    """
+    from backend.app.domains.inventory.runway import ResourceRunwayService
+
+    severity = _parse_severity(constraint.severity)
+    hard_soft = _parse_hard_soft(constraint.hard_or_soft)
+    params = constraint.parameters or {}
+    subject_id = constraint.subject_id
+
+    target_lot_id = subject_id
+    if not target_lot_id and params.get("stock_lot_id"):
+        try:
+            target_lot_id = uuid.UUID(str(params["stock_lot_id"]))
+        except Exception:
+            target_lot_id = None
+
+    if not target_lot_id:
+        return ConstraintEvaluationResult(
+            constraint_id=constraint.id,
+            code=constraint.code,
+            name=constraint.name,
+            severity=severity,
+            hard_or_soft=hard_soft,
+            state=ConstraintState.NOT_EVALUABLE,
+            subject_type=constraint.subject_type or "INVENTORY_STOCK_LOT",
+            subject_id=uuid.UUID(int=0),
+            reason="Constraint subject_id is missing or does not reference a stock lot.",
+            evidence={}
+        )
+
+    runway_service = ResourceRunwayService(session)
+    lookback_days = int(params.get("lookback_days", 14))
+    runway = runway_service.evaluate_lot_runway(target_lot_id, lookback_days=lookback_days)
+
+    if not runway:
+        return ConstraintEvaluationResult(
+            constraint_id=constraint.id,
+            code=constraint.code,
+            name=constraint.name,
+            severity=severity,
+            hard_or_soft=hard_soft,
+            state=ConstraintState.NOT_EVALUABLE,
+            subject_type=constraint.subject_type or "INVENTORY_STOCK_LOT",
+            subject_id=target_lot_id,
+            reason=f"Stock lot {target_lot_id} not found in inventory.",
+            evidence={"stock_lot_id": str(target_lot_id)}
+        )
+
+    evidence = {
+        "stock_lot_id": str(runway.stock_lot_id),
+        "item_code": runway.item_code,
+        "item_name": runway.item_name,
+        "available_quantity": float(runway.available_quantity),
+        "daily_burn_rate": float(runway.daily_burn_rate),
+        "burn_rate_source": runway.burn_rate_source,
+        "runway_days": runway.runway_days,
+        "exhaustion_at": runway.exhaustion_at.isoformat() if runway.exhaustion_at else None,
+        "next_inbound_at": runway.next_inbound_at.isoformat() if runway.next_inbound_at else None,
+        "resupply_gap_days": runway.resupply_gap_days,
+        "runway_state": runway.runway_state,
+        "reorder_buffer_days": runway.reorder_buffer_days,
+        "replenishment_lead_days": runway.replenishment_lead_days,
+    }
+
+    if runway.runway_state == "NO_CONSUMPTION_OBSERVED":
+        return ConstraintEvaluationResult(
+            constraint_id=constraint.id,
+            code=constraint.code,
+            name=constraint.name,
+            severity=severity,
+            hard_or_soft=hard_soft,
+            state=ConstraintState.NOT_EVALUABLE,
+            subject_type=constraint.subject_type or "INVENTORY_STOCK_LOT",
+            subject_id=target_lot_id,
+            reason=f"No consumption observations or baseline burn rate available for resource '{runway.item_code}'.",
+            evidence=evidence
+        )
+
+    if runway.runway_state == "RESUPPLY_GAP":
+        inbound_str = runway.next_inbound_at.strftime("%Y-%m-%d %H:%M UTC") if runway.next_inbound_at else "scheduled arrival"
+        exhaust_str = runway.exhaustion_at.strftime("%Y-%m-%d %H:%M UTC") if runway.exhaustion_at else "exhaustion"
+        return ConstraintEvaluationResult(
+            constraint_id=constraint.id,
+            code=constraint.code,
+            name=constraint.name,
+            severity=severity,
+            hard_or_soft=hard_soft,
+            state=ConstraintState.VIOLATED,
+            subject_type=constraint.subject_type or "INVENTORY_STOCK_LOT",
+            subject_id=target_lot_id,
+            reason=f"Projected resupply deficit gap of {runway.resupply_gap_days} days for '{runway.item_code}': depletes {exhaust_str} prior to inbound replenishment on {inbound_str}.",
+            evidence=evidence
+        )
+
+    if runway.runway_state in ("AT_RISK", "NO_INBOUND_SCHEDULED"):
+        buffer_days = runway.replenishment_lead_days or runway.reorder_buffer_days or 0
+        return ConstraintEvaluationResult(
+            constraint_id=constraint.id,
+            code=constraint.code,
+            name=constraint.name,
+            severity=severity,
+            hard_or_soft=hard_soft,
+            state=ConstraintState.VIOLATED,
+            subject_type=constraint.subject_type or "INVENTORY_STOCK_LOT",
+            subject_id=target_lot_id,
+            reason=f"Resource runway ({runway.runway_days} days) breached operational replenishment buffer ({buffer_days} days) for '{runway.item_code}'.",
+            evidence=evidence
+        )
+
+    return ConstraintEvaluationResult(
+        constraint_id=constraint.id,
+        code=constraint.code,
+        name=constraint.name,
+        severity=severity,
+        hard_or_soft=hard_soft,
+        state=ConstraintState.SATISFIED,
+        subject_type=constraint.subject_type or "INVENTORY_STOCK_LOT",
+        subject_id=target_lot_id,
+        reason=f"Resource runway ({runway.runway_days} days) provides adequate operational coverage for '{runway.item_code}'.",
+        evidence=evidence
+    )
+
+
 # Explicit Rule Registry: dispatch dictionary from rule_code to Python function
 RULE_REGISTRY: Dict[str, Callable[[Session, ConstraintModel, Optional[Dict[str, Any]]], ConstraintEvaluationResult]] = {
     "MISSION_REQUIRED_BY": evaluate_mission_required_by,
@@ -967,6 +1097,7 @@ RULE_REGISTRY: Dict[str, Callable[[Session, ConstraintModel, Optional[Dict[str, 
     "TRANSPORT_CAPACITY": evaluate_transport_capacity,
     "ASSET_AVAILABILITY": evaluate_asset_availability,
     "INVENTORY_AVAILABILITY": evaluate_inventory_availability,
+    "RESOURCE_RUNWAY_HORIZON": evaluate_resource_runway_horizon,
     "DOCUMENT_VALIDITY": evaluate_document_validity,
     "LOCATION_ACCESS": evaluate_location_access,
     "TIME_WINDOW": evaluate_time_window,
