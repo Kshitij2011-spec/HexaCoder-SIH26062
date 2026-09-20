@@ -58,6 +58,10 @@ export const controlTowerKeys = {
     expeditionId
       ? (['control-tower', 'overview', { expeditionId }] as const)
       : (['control-tower', 'overview'] as const),
+  overviewFast: (expeditionId?: string) =>
+    expeditionId
+      ? (['control-tower', 'overview-fast', { expeditionId }] as const)
+      : (['control-tower', 'overview-fast'] as const),
   expedition: (expeditionId: string) =>
     ['control-tower', 'expedition', expeditionId] as const,
   summary: (expeditionId: string) =>
@@ -87,6 +91,16 @@ export const controlTowerKeys = {
 };
 
 // ─── Query Hooks ─────────────────────────────────────────────────────────────
+
+export function useControlTowerFastOverview(expeditionId?: string) {
+  return useQuery({
+    queryKey: controlTowerKeys.overviewFast(expeditionId),
+    queryFn: async () => {
+      const query = buildQuery({ expedition_id: expeditionId });
+      return await apiClient.get<ControlTowerOverview>(`/control-tower/overview/fast${query}`);
+    },
+  });
+}
 
 export function useControlTowerOverview(expeditionId?: string) {
   return useQuery({

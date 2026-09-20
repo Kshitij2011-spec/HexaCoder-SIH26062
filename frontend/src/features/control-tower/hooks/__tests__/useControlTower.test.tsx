@@ -5,6 +5,7 @@ import React from 'react';
 import { createTestQueryClient } from '../../../../test-utils';
 import {
   controlTowerKeys,
+  useControlTowerFastOverview,
   useControlTowerOverview,
   useExpeditionSummary,
   useMissionOperations,
@@ -114,6 +115,24 @@ describe('Control Tower Query Hooks', () => {
 
     expect(apiClient.get).toHaveBeenCalledWith('/control-tower/overview?expedition_id=exp-1');
     expect(result.current.data).toEqual(mockOverview);
+  });
+
+  it('useControlTowerFastOverview fetches fast overview command posture data', async () => {
+    const mockFastOverview: Partial<ControlTowerOverview> = {
+      total_expeditions: 2,
+      total_missions: 5,
+      active_incidents_count: 1,
+      pending_approvals_count: 2,
+      data_provenance: 'DERIVED',
+    };
+    vi.mocked(apiClient.get).mockResolvedValueOnce(mockFastOverview);
+
+    const { result } = renderHook(() => useControlTowerFastOverview('exp-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(apiClient.get).toHaveBeenCalledWith('/control-tower/overview/fast?expedition_id=exp-1');
+    expect(result.current.data).toEqual(mockFastOverview);
   });
 
   it('useExpeditionSummary fetches single expedition summary by ID', async () => {

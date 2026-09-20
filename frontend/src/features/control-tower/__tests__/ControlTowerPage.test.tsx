@@ -207,7 +207,7 @@ describe('ControlTowerPage', () => {
     ];
 
     vi.mocked(apiClient.get).mockImplementation(async (path: string) => {
-      if (path === '/control-tower/overview') return mockOverview;
+      if (path === '/control-tower/overview' || path === '/control-tower/overview/fast') return mockOverview;
       if (path === '/control-tower/expeditions/exp-1') return mockOverview.expeditions[0];
       if (path.startsWith('/control-tower/expeditions/exp-1/missions')) return mockMissions;
       if (path.startsWith('/control-tower/expeditions/exp-1/constraints')) return [mockConstraint];
