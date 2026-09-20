@@ -23,6 +23,7 @@ import { useIncidentTimeline } from './hooks/useIncidentTimeline';
 import { useIncidentReferences } from './hooks/useIncidentReferences';
 import { useEscalateIncidentToReplan } from './hooks/useIncidentMutations';
 import { useIncidentContext } from '../control-tower/hooks/useControlTower';
+import { useOfflineSync } from '../../lib/sync';
 import type { Incident } from '../../lib/types/api';
 
 interface Props {
@@ -49,6 +50,12 @@ export function IncidentDetailPanel({ incident, onClose, onRefreshIncident }: Pr
 
   const { data: incidentContext } = useIncidentContext(incident?.id ?? null);
   const escalateMutation = useEscalateIncidentToReplan(incident?.id ?? '');
+
+  const { operations } = useOfflineSync();
+  const queuedOp = operations.find(
+    (op) => op.entity_type === 'INCIDENT' && op.entity_id === incident?.id && op.local_status === 'LOCAL_QUEUED'
+  );
+  const isLocalQueued = Boolean((incident as { _is_local_queued?: boolean } | null)?._is_local_queued || queuedOp);
 
   if (!incident) return null;
 
@@ -96,6 +103,14 @@ export function IncidentDetailPanel({ incident, onClose, onRefreshIncident }: Pr
               <EntityCode code={incident.code} />
               <IncidentSeverityBadge severity={incident.severity} />
               <StatusBadge status={incident.status} />
+              {isLocalQueued && (
+                <span
+                  data-testid="detail-local-queued-badge"
+                  className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950/90 border border-amber-500 text-amber-300 shadow-sm animate-pulse"
+                >
+                  LOCAL_QUEUED [SYNTHETIC/DEMO]
+                </span>
+              )}
               <ProvenanceTag provenance={incident.data_provenance} />
             </div>
             <h2 className="text-base font-semibold text-slate-100 mt-0.5">
