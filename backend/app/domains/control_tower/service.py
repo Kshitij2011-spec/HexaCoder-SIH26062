@@ -48,6 +48,11 @@ from backend.app.domains.control_tower.schemas import (
     DecisionApprovalItem,
     ConsequentialActionItem,
 )
+from backend.app.domains.inventory.runway import ResourceRunwayService
+from backend.app.domains.inventory.runway_schemas import (
+    ResourceRunwayItem,
+    ResourceRunwaySummary,
+)
 from backend.app.shared.types.reasoning import (
     ReadinessState,
     ConstraintState,
@@ -71,6 +76,7 @@ class ControlTowerService:
         self.event_service = EventService(session)
         self.audit_service = AuditService(session)
         self.replan_repo = ReplanRepository(session)
+        self.runway_service = ResourceRunwayService(session)
 
     # -----------------------------------------------------------------------
     # 1. Global Overview
@@ -202,6 +208,18 @@ class ControlTowerService:
         # 7. Recent Operational Events
         feed_items, _ = self.get_events_feed(expedition_id=expedition_id, page=1, page_size=10)
 
+        # 8. Consumable Runway Summary
+        target_exp_id = expedition_id
+        if not target_exp_id and expeditions:
+            target_exp_id = expeditions[0].id
+
+        runway_summary = None
+        if target_exp_id:
+            try:
+                runway_summary = self.get_expedition_runways(target_exp_id)
+            except Exception:
+                runway_summary = None
+
         return ControlTowerOverview(
             total_expeditions=len(expedition_summaries),
             expeditions=expedition_summaries,
@@ -215,8 +233,26 @@ class ControlTowerService:
             pending_approvals_count=pending_approvals,
             offline_sync_summary=sync_counts,
             recent_operational_events=feed_items,
+            resource_runway_summary=runway_summary,
             data_provenance="DERIVED",
             generated_at=now,
+        )
+
+    def get_expedition_runways(
+        self,
+        expedition_id: uuid.UUID,
+        location_id: Optional[uuid.UUID] = None,
+        category: Optional[str] = None,
+        criticality: Optional[str] = None,
+        lookback_days: int = 14,
+    ) -> ResourceRunwaySummary:
+        """Evaluates consumable resource runways and resupply gap analysis for an expedition."""
+        return self.runway_service.get_expedition_runways(
+            expedition_id=expedition_id,
+            location_id=location_id,
+            category=category,
+            criticality=criticality,
+            lookback_days=lookback_days,
         )
 
     # -----------------------------------------------------------------------

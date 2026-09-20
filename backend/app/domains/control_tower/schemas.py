@@ -5,6 +5,12 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.app.domains.inventory.runway_schemas import (
+    ResourceRunwayItem,
+    ResourceRunwaySummary,
+    BurnRateEvidence,
+)
+
 
 # ---------------------------------------------------------------------------
 # 1. Operational Event Feed
@@ -128,6 +134,7 @@ class ControlTowerOverview(BaseModel):
     pending_approvals_count: int = 0
     offline_sync_summary: Dict[str, Any] = Field(default_factory=dict)
     recent_operational_events: List[OperationalEventFeedItem] = Field(default_factory=list)
+    resource_runway_summary: Optional[ResourceRunwaySummary] = None
     data_provenance: str = "DERIVED"
     generated_at: datetime
 

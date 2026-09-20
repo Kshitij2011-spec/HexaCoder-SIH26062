@@ -21,6 +21,7 @@ from backend.app.domains.control_tower.schemas import (
     IncidentEscalationRequest,
     IncidentEscalationResult,
     IncidentContextView,
+    ResourceRunwaySummary,
 )
 from backend.app.domains.control_tower.scenarios import ScenarioInjectionService
 from backend.app.domains.control_tower.incident_escalation import IncidentEscalationService
@@ -61,6 +62,34 @@ def get_expedition_control_summary(
     """Returns expedition-specific operational posture, readiness rollup, and blocker summaries."""
     service = ControlTowerService(db)
     summary = service.get_expedition_summary(expedition_id=expedition_id)
+    return create_success_response(
+        data=summary,
+        correlation_id=request.headers.get("X-Request-ID") if request else None,
+    )
+
+
+@router.get("/expeditions/{expedition_id}/runways", response_model=ApiResponse[ResourceRunwaySummary])
+def get_expedition_runways(
+    expedition_id: uuid.UUID,
+    location_id: Optional[uuid.UUID] = Query(None, description="Filter by storage location"),
+    category: Optional[str] = Query(None, description="Filter by category (FUEL, RATIONS, etc.)"),
+    criticality: Optional[str] = Query(None, description="Filter by criticality tier"),
+    lookback_days: int = Query(default=14, ge=1, le=90, description="Observation window in days"),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Evaluates consumable resource runways, daily burn rates, and resupply deficit gaps
+    for an expedition campaign without simulating SCADA or telemetry.
+    """
+    service = ControlTowerService(db)
+    summary = service.get_expedition_runways(
+        expedition_id=expedition_id,
+        location_id=location_id,
+        category=category,
+        criticality=criticality,
+        lookback_days=lookback_days,
+    )
     return create_success_response(
         data=summary,
         correlation_id=request.headers.get("X-Request-ID") if request else None,
