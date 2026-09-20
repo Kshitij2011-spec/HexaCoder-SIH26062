@@ -25,7 +25,7 @@ logger = get_logger("platform.main")
 
 # Instantiate authorative FastAPI platform application
 app = FastAPI(
-    title="HexaCoders Polar Expedition Logistics Platform API",
+    title="CRYOS — Polar Expedition Logistics Platform API",
     description=(
         "Authoritative application boundary for Antarctic & Polar Expedition Operational Logistics. "
         "Orchestrates expeditions, missions, teams, personnel, temporal constraints, and immutable operational events."
