@@ -1069,3 +1069,88 @@ export interface ResourceRunwaySummary {
   runways: ResourceRunwayItem[];
   data_provenance: string;
 }
+
+// ─── Milestone A10: Personnel & Field Team Deployment Safety Engine ──────────
+
+export type PersonnelSafetyStatus = 'CLEAR' | 'WARNING' | 'BLOCKED';
+
+export interface PersonnelSafetyFinding {
+  finding_id: string;
+  rule_id: string;
+  status: PersonnelSafetyStatus;
+  subject_type: 'PERSON' | 'TEAM';
+  subject_id: string;
+  subject_code: string;
+  subject_name: string;
+  mission_id?: string | null;
+  mission_code?: string | null;
+  team_id?: string | null;
+  team_code?: string | null;
+  reason: string;
+  evidence: Record<string, unknown>;
+  recommended_action?: string | null;
+  data_provenance: string;
+}
+
+export interface TeamMemberBrief {
+  person_id: string;
+  person_code: string;
+  full_name: string;
+  role: string;
+  readiness_state: string;
+  movement_state: string;
+  is_leader: boolean;
+}
+
+export interface TeamDeploymentPosture {
+  team_id: string;
+  team_code: string;
+  team_name: string;
+  status: string;
+  leader_person_id?: string | null;
+  leader_name?: string | null;
+  leader_readiness?: string | null;
+  mission_id?: string | null;
+  mission_code?: string | null;
+  location_id?: string | null;
+  location_name?: string | null;
+  headcount: number;
+  members: TeamMemberBrief[];
+  deployment_status: PersonnelSafetyStatus;
+  unmet_requirements: string[];
+  data_provenance: string;
+}
+
+export interface ReassignmentOpportunity {
+  team_id: string;
+  team_code: string;
+  mission_id?: string | null;
+  mission_code?: string | null;
+  displaced_person_id: string;
+  displaced_person_code: string;
+  displaced_role: string;
+  candidate_person_id: string;
+  candidate_person_code: string;
+  candidate_full_name: string;
+  candidate_role: string;
+  candidate_readiness: string;
+  rationale: string;
+  data_provenance: string;
+}
+
+export interface PersonnelPostureSummary {
+  expedition_id: string;
+  overall_status: PersonnelSafetyStatus;
+  total_personnel: number;
+  cleared_count: number;
+  medical_hold_count: number;
+  unavailable_count: number;
+  at_station_count: number;
+  field_deployed_count: number;
+  in_transit_count: number;
+  teams: TeamDeploymentPosture[];
+  findings: PersonnelSafetyFinding[];
+  reassignment_opportunities: ReassignmentOpportunity[];
+  evaluated_at: string;
+  data_provenance: string;
+}

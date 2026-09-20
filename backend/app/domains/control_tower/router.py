@@ -22,6 +22,7 @@ from backend.app.domains.control_tower.schemas import (
     IncidentEscalationResult,
     IncidentContextView,
     ResourceRunwaySummary,
+    PersonnelPostureSummary,
 )
 from backend.app.domains.control_tower.scenarios import ScenarioInjectionService
 from backend.app.domains.control_tower.incident_escalation import IncidentEscalationService
@@ -90,6 +91,24 @@ def get_expedition_runways(
         criticality=criticality,
         lookback_days=lookback_days,
     )
+    return create_success_response(
+        data=summary,
+        correlation_id=request.headers.get("X-Request-ID") if request else None,
+    )
+
+
+@router.get("/expeditions/{expedition_id}/personnel-safety", response_model=ApiResponse[PersonnelPostureSummary])
+def get_expedition_personnel_safety(
+    expedition_id: uuid.UUID,
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Evaluates personnel deployment safety, team staffing compliance, and medical clearance posture
+    for an expedition campaign using deterministic domain invariants.
+    """
+    service = ControlTowerService(db)
+    summary = service.get_personnel_safety(expedition_id=expedition_id)
     return create_success_response(
         data=summary,
         correlation_id=request.headers.get("X-Request-ID") if request else None,

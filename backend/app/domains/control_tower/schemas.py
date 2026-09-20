@@ -135,8 +135,10 @@ class ControlTowerOverview(BaseModel):
     offline_sync_summary: Dict[str, Any] = Field(default_factory=dict)
     recent_operational_events: List[OperationalEventFeedItem] = Field(default_factory=list)
     resource_runway_summary: Optional[ResourceRunwaySummary] = None
+    personnel_safety_summary: Optional["PersonnelPostureSummary"] = None
     data_provenance: str = "DERIVED"
     generated_at: datetime
+
 
 
 # ---------------------------------------------------------------------------
@@ -309,3 +311,69 @@ class IncidentContextView(BaseModel):
     correlation_id: Optional[Union[str, uuid.UUID]] = None
     data_provenance: str = "DERIVED"
 
+
+# ---------------------------------------------------------------------------
+# 10. Personnel & Field Team Deployment Safety Engine (A10)
+# ---------------------------------------------------------------------------
+
+class PersonnelSafetyFinding(BaseModel):
+    """Deterministic personnel deployment safety finding with full explainability."""
+    model_config = ConfigDict(from_attributes=True)
+
+    finding_id: str
+    rule_id: str
+    status: str  # CLEAR, WARNING, BLOCKED
+    subject_type: str  # PERSON or TEAM
+    subject_id: uuid.UUID
+    subject_code: str
+    subject_name: str
+    mission_id: Optional[uuid.UUID] = None
+    mission_code: Optional[str] = None
+    team_id: Optional[uuid.UUID] = None
+    team_code: Optional[str] = None
+    reason: str
+    evidence: Dict[str, Any] = Field(default_factory=dict)
+    recommended_action: Optional[str] = None
+    data_provenance: str = "DERIVED"
+
+
+class TeamDeploymentPosture(BaseModel):
+    """Deployment status and qualification posture of an expedition team."""
+    model_config = ConfigDict(from_attributes=True)
+
+    team_id: uuid.UUID
+    team_code: str
+    team_name: str
+    status: str
+    leader_person_id: Optional[uuid.UUID] = None
+    leader_name: Optional[str] = None
+    leader_readiness: Optional[str] = None
+    mission_id: Optional[uuid.UUID] = None
+    mission_code: Optional[str] = None
+    location_id: Optional[uuid.UUID] = None
+    location_name: Optional[str] = None
+    headcount: int = 0
+    members: List[Dict[str, Any]] = Field(default_factory=list)
+    deployment_status: str = "CLEAR"  # CLEAR, WARNING, BLOCKED
+    unmet_requirements: List[str] = Field(default_factory=list)
+    data_provenance: str = "DERIVED"
+
+
+class PersonnelPostureSummary(BaseModel):
+    """Comprehensive expedition-scoped personnel & field team safety read model."""
+    model_config = ConfigDict(from_attributes=True)
+
+    expedition_id: uuid.UUID
+    overall_status: str = "CLEAR"  # CLEAR, WARNING, BLOCKED
+    total_personnel: int = 0
+    cleared_count: int = 0
+    medical_hold_count: int = 0
+    unavailable_count: int = 0
+    at_station_count: int = 0
+    field_deployed_count: int = 0
+    in_transit_count: int = 0
+    teams: List[TeamDeploymentPosture] = Field(default_factory=list)
+    findings: List[PersonnelSafetyFinding] = Field(default_factory=list)
+    reassignment_opportunities: List[Dict[str, Any]] = Field(default_factory=list)
+    evaluated_at: datetime
+    data_provenance: str = "DERIVED"
