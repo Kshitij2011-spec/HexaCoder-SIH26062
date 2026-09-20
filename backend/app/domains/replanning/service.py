@@ -41,6 +41,12 @@ from backend.app.domains.missions.service import MissionService
 from backend.app.domains.missions.schemas import MissionUpdate
 from backend.app.domains.missions.models import MissionModel
 from backend.app.domains.assets.models import AssetModel
+from backend.app.domains.people.models import PersonModel
+from backend.app.domains.people.service import PersonService
+from backend.app.domains.people.schemas import PersonUpdate
+from backend.app.domains.teams.models import TeamModel
+from backend.app.domains.teams.service import TeamService
+from backend.app.domains.teams.schemas import TeamUpdate
 from backend.app.core.errors import (
     EntityNotFoundError,
     DomainValidationError,
@@ -604,6 +610,220 @@ class ReplanService:
             candidate_options.append(opt)
             option_idx += 1
 
+        # -------------------------------------------------------------
+        # CANDIDATE 5: Personnel Reassignment (REASSIGN_PERSONNEL)
+        # Search for available qualified personnel in same expedition
+        # to substitute unready / disqualified team members
+        # -------------------------------------------------------------
+        impacted_person_ids = set()
+        impacted_team_ids = set()
+
+        if replan.trigger_entity_type == "PERSON" and replan.trigger_entity_id:
+            impacted_person_ids.add(replan.trigger_entity_id)
+        elif replan.trigger_entity_type == "TEAM" and replan.trigger_entity_id:
+            impacted_team_ids.add(replan.trigger_entity_id)
+
+        for aff in affected_list:
+            etype = aff.get("entity_type")
+            eid_str = aff.get("entity_id")
+            if eid_str:
+                try:
+                    eid = uuid.UUID(str(eid_str))
+                    if etype == "PERSON":
+                        impacted_person_ids.add(eid)
+                    elif etype == "TEAM":
+                        impacted_team_ids.add(eid)
+                except (ValueError, TypeError):
+                    pass
+
+        # Also inspect teams assigned to impacted missions
+        teams_to_evaluate = set(impacted_team_ids)
+        if impacted_mission_ids:
+            for mid in impacted_mission_ids:
+                teams_for_mission_stmt = select(TeamModel).where(
+                    TeamModel.mission_id == mid,
+                    TeamModel.expedition_id == replan.expedition_id,
+                )
+                m_teams = list(self.session.execute(teams_for_mission_stmt).scalars().all())
+                for mt in m_teams:
+                    teams_to_evaluate.add(mt.id)
+
+        # If trigger is a person, find their team
+        for pid in impacted_person_ids:
+            pers = self.session.get(PersonModel, pid)
+            if pers and pers.team_id:
+                teams_to_evaluate.add(pers.team_id)
+
+        # If still no teams identified, evaluate teams in expedition that have disqualified members or deficits
+        if not teams_to_evaluate and replan.expedition_id:
+            exp_teams_stmt = select(TeamModel).where(TeamModel.expedition_id == replan.expedition_id)
+            exp_teams = list(self.session.execute(exp_teams_stmt).scalars().all())
+            for et in exp_teams:
+                teams_to_evaluate.add(et.id)
+
+        # Look up eligible candidates at station base for same expedition:
+        station_cands_stmt = select(PersonModel).where(
+            PersonModel.expedition_id == replan.expedition_id,
+            PersonModel.readiness_state == "READY",
+            PersonModel.movement_state.in_(["AT_STATION", "NOT_DEPLOYED"]),
+        )
+        station_candidates = list(self.session.execute(station_cands_stmt).scalars().all())
+
+        for tid in teams_to_evaluate:
+            eval_team = self.session.get(TeamModel, tid)
+            if not eval_team:
+                continue
+
+            # Find members of this team
+            team_members_stmt = select(PersonModel).where(
+                PersonModel.team_id == eval_team.id,
+                PersonModel.expedition_id == replan.expedition_id,
+            )
+            members = list(self.session.execute(team_members_stmt).scalars().all())
+
+            # Check for disqualified/unready members
+            disqualified_members = [
+                m for m in members
+                if m.readiness_state in ("NOT_CLEARED", "CLEARANCE_PENDING", "UNAVAILABLE")
+                or (eval_team.status in ("FIELD", "DEPLOYED") and m.movement_state in ("NOT_DEPLOYED", "RETURNING"))
+            ]
+
+            for dm in disqualified_members:
+                # Find available replacement from station candidates
+                replacement_cand = next(
+                    (c for c in station_candidates if c.id != dm.id and c.team_id != eval_team.id),
+                    None
+                )
+                if replacement_cand:
+                    opt = ReplanOptionModel(
+                        id=uuid.uuid4(),
+                        replan_id=replan.id,
+                        option_code=f"OPT-{option_idx:02d}",
+                        title=f"Reassign Personnel: Substitute {replacement_cand.full_name} for {dm.full_name} in {eval_team.name} ({eval_team.code})",
+                        description=(
+                            f"Substitute unready specialist {dm.person_code} ({dm.role}, {dm.readiness_state}) "
+                            f"with cleared station personnel {replacement_cand.person_code} ({replacement_cand.full_name}, {replacement_cand.role}) "
+                            f"in team '{eval_team.name}' ({eval_team.code}) to restore deployment safety."
+                        ),
+                        action_type=ReplanActionType.REASSIGN_PERSONNEL.value,
+                        affected_entity_type="TEAM",
+                        affected_entity_id=eval_team.id,
+                        proposed_changes=[
+                            {
+                                "action": "remove_team_member",
+                                "person_id": str(dm.id),
+                                "person_code": dm.person_code,
+                                "team_id": str(eval_team.id),
+                            },
+                            {
+                                "action": "assign_team_member",
+                                "person_id": str(replacement_cand.id),
+                                "person_code": replacement_cand.person_code,
+                                "team_id": str(eval_team.id),
+                                "team_code": eval_team.code,
+                            },
+                        ],
+                        proposed_state_change={
+                            "action": "REASSIGN_PERSONNEL",
+                            "team_id": str(eval_team.id),
+                            "displaced_person_id": str(dm.id),
+                            "displaced_person_code": dm.person_code,
+                            "replacement_person_id": str(replacement_cand.id),
+                            "replacement_person_code": replacement_cand.person_code,
+                            "mission_id": str(eval_team.mission_id) if eval_team.mission_id else None,
+                        },
+                        prerequisite_conditions=[
+                            f"Candidate {replacement_cand.person_code} holds verified qualifications for role {dm.role}",
+                            "Expedition operations commander approves field team manifest update",
+                        ],
+                        expected_impact={
+                            "team_readiness": "RESTORED",
+                            "deployment_safety": "CLEAR",
+                            "personnel_substituted": f"{dm.person_code} -> {replacement_cand.person_code}",
+                        },
+                        feasibility_state=OptionFeasibility.FEASIBLE.value,
+                        operational_rationale=(
+                            f"Replaces unready crew member {dm.person_code} with cleared station specialist "
+                            f"{replacement_cand.person_code} without delaying expedition field timeline."
+                        ),
+                        evidence={
+                            "displaced_person": dm.person_code,
+                            "displaced_readiness": dm.readiness_state,
+                            "candidate_person": replacement_cand.person_code,
+                            "candidate_readiness": replacement_cand.readiness_state,
+                            "team_code": eval_team.code,
+                        },
+                        assumptions=[
+                            "Replacement specialist acclimatization and cold-weather gear certified",
+                        ],
+                        data_provenance="DERIVED",
+                    )
+                    candidate_options.append(opt)
+                    option_idx += 1
+                else:
+                    opt = ReplanOptionModel(
+                        id=uuid.uuid4(),
+                        replan_id=replan.id,
+                        option_code=f"OPT-{option_idx:02d}",
+                        title=f"Personnel Substitution for {dm.person_code} in {eval_team.code}",
+                        description=f"Attempt personnel substitution for {dm.full_name}; no cleared station personnel available in expedition.",
+                        action_type=ReplanActionType.REASSIGN_PERSONNEL.value,
+                        affected_entity_type="TEAM",
+                        affected_entity_id=eval_team.id,
+                        feasibility_state=OptionFeasibility.NOT_EVALUABLE.value,
+                        operational_rationale="No verified available cleared personnel found in active station complement.",
+                        evidence={"displaced_person": dm.person_code, "available_substitutes": 0},
+                        data_provenance="ADVISORY",
+                    )
+                    candidate_options.append(opt)
+                    option_idx += 1
+
+            # Check for headcount deficit without disqualified members (e.g. team has < 2 members)
+            if eval_team.mission_id and len(members) < 2 and not disqualified_members:
+                eligible_cands = [c for c in station_candidates if c.team_id != eval_team.id]
+                if eligible_cands:
+                    cand = eligible_cands[0]
+                    opt = ReplanOptionModel(
+                        id=uuid.uuid4(),
+                        replan_id=replan.id,
+                        option_code=f"OPT-{option_idx:02d}",
+                        title=f"Assign Personnel: Augment {eval_team.name} ({eval_team.code}) with {cand.full_name}",
+                        description=(
+                            f"Assign cleared station personnel {cand.person_code} ({cand.full_name}) to field team "
+                            f"'{eval_team.name}' to satisfy mandatory polar 2-person buddy safety invariant."
+                        ),
+                        action_type=ReplanActionType.REASSIGN_PERSONNEL.value,
+                        affected_entity_type="TEAM",
+                        affected_entity_id=eval_team.id,
+                        proposed_changes=[
+                            {
+                                "action": "assign_team_member",
+                                "person_id": str(cand.id),
+                                "person_code": cand.person_code,
+                                "team_id": str(eval_team.id),
+                                "team_code": eval_team.code,
+                            }
+                        ],
+                        proposed_state_change={
+                            "action": "REASSIGN_PERSONNEL",
+                            "team_id": str(eval_team.id),
+                            "replacement_person_id": str(cand.id),
+                            "replacement_person_code": cand.person_code,
+                            "mission_id": str(eval_team.mission_id) if eval_team.mission_id else None,
+                        },
+                        prerequisite_conditions=[
+                            "Expedition operations commander approves field team augmentation",
+                        ],
+                        expected_impact={"headcount_safety": "RESTORED", "deployment_safety": "CLEAR"},
+                        feasibility_state=OptionFeasibility.FEASIBLE.value,
+                        operational_rationale="Augments undersized field team to satisfy polar safety buddy invariant.",
+                        evidence={"team_code": eval_team.code, "current_headcount": len(members), "candidate": cand.person_code},
+                        assumptions=["Candidate is cleared and ready for field deployment"],
+                        data_provenance="DERIVED",
+                    )
+                    candidate_options.append(opt)
+                    option_idx += 1
+
         # Persist generated options
         for opt in candidate_options:
             self.repo.create_option(opt)
@@ -642,6 +862,13 @@ class ReplanService:
                 rationales = [
                     "De-escalates coastal transport bottleneck",
                     "Acceptable soft impact on overall expedition campaign",
+                ]
+            elif f_opt.action_type == ReplanActionType.REASSIGN_PERSONNEL.value:
+                rationales = [
+                    "Restores team compliance with polar safety qualifications",
+                    "Utilizes verified cleared personnel from active station complement",
+                    "Avoids costly field mission cancellation or evacuation delay",
+                    "Enforces polar buddy safety invariant",
                 ]
 
             rec = RecommendationModel(
@@ -752,6 +979,8 @@ class ApprovalService:
         self.audit_service = AuditService(session)
         self.transport_service = TransportService(session)
         self.mission_service = MissionService(session)
+        self.person_service = PersonService(session)
+        self.team_service = TeamService(session)
 
     def request_approval(
         self,
@@ -1021,6 +1250,82 @@ class ApprovalService:
                         "action": "DEFER_ACTIVITY",
                         "priority": 1,
                     })
+
+                elif option.action_type == ReplanActionType.REASSIGN_PERSONNEL.value:
+                    state_change = option.proposed_state_change or {}
+                    team_id_str = state_change.get("team_id")
+                    rep_id_str = state_change.get("replacement_person_id")
+                    disp_id_str = state_change.get("displaced_person_id")
+
+                    if not team_id_str or not rep_id_str:
+                        raise DomainValidationError(
+                            message=f"Reassign option '{option.option_code}' missing required team_id or replacement_person_id.",
+                            field="proposed_state_change",
+                        )
+
+                    team_id = uuid.UUID(team_id_str)
+                    rep_id = uuid.UUID(rep_id_str)
+                    team = self.team_service.get_team(team_id)
+                    rep_person = self.person_service.get_person(rep_id)
+
+                    if rep_person.readiness_state in ("NOT_CLEARED", "UNAVAILABLE"):
+                        raise DomainValidationError(
+                            message=f"Cannot assign personnel '{rep_person.person_code}': readiness state is '{rep_person.readiness_state}'.",
+                            field="readiness_state",
+                        )
+
+                    # If displaced person is currently on team, disassociate them
+                    if disp_id_str:
+                        disp_id = uuid.UUID(disp_id_str)
+                        disp_person = self.session.get(PersonModel, disp_id)
+                        if disp_person and disp_person.team_id == team_id:
+                            disp_person.team_id = None
+                            self.session.flush()
+
+                        # If displaced person was team leader, promote replacement person
+                        if team.leader_person_id == disp_id:
+                            self.team_service.update_team(
+                                team_id=team_id,
+                                data=TeamUpdate(leader_person_id=rep_id),
+                                correlation_id=cid,
+                                actor_context=actor,
+                            )
+
+                    # Update replacement person to join team
+                    self.person_service.update_person(
+                        person_id=rep_id,
+                        data=PersonUpdate(team_id=team_id),
+                        correlation_id=cid,
+                        actor_context=actor,
+                    )
+
+                    applied_changes.append({
+                        "entity_type": "TEAM",
+                        "entity_id": str(team_id),
+                        "action": "REASSIGN_PERSONNEL",
+                        "replacement_person_id": str(rep_id),
+                        "replacement_person_code": rep_person.person_code,
+                        "displaced_person_id": disp_id_str,
+                    })
+
+                    # Transactional event emission: TeamMemberReassigned
+                    self.event_service.append_event(
+                        event_type="TeamMemberReassigned",
+                        entity_type="TEAM",
+                        entity_id=team_id,
+                        new_state=team.status,
+                        previous_state=team.status,
+                        source=actor.get("source", "API"),
+                        actor_type="OPERATOR",
+                        actor_id=request.actor_person_id,
+                        correlation_id=cid,
+                        evidence={
+                            "team_id": str(team_id),
+                            "team_code": team.code,
+                            "replacement_person_id": str(rep_id),
+                            "displaced_person_id": disp_id_str,
+                        },
+                    )
 
             with self.session.begin_nested():
                 # Update recommendation state

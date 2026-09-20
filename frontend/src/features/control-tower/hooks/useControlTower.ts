@@ -22,6 +22,7 @@ import type {
   ScenarioInjectRequest,
   ScenarioInjectResult,
   IncidentContextView,
+  PersonnelPostureSummary,
 } from '../../../lib/types/api';
 
 // ─── Filter Contracts ────────────────────────────────────────────────────────
@@ -81,6 +82,8 @@ export const controlTowerKeys = {
     ['control-tower', 'expedition', expeditionId, 'audit'] as const,
   audit: (expeditionId: string, page: number = 1) =>
     ['control-tower', 'expedition', expeditionId, 'audit', { page }] as const,
+  personnelSafety: (expeditionId: string) =>
+    ['control-tower', 'expedition', expeditionId, 'personnel-safety'] as const,
 };
 
 // ─── Query Hooks ─────────────────────────────────────────────────────────────
@@ -201,6 +204,19 @@ export function useConsequentialAudit(expeditionId: string, page: number = 1) {
       const query = buildQuery({ page, page_size: 20 });
       return await apiClient.get<ConsequentialActionItem[]>(
         `/control-tower/expeditions/${expeditionId}/audit${query}`,
+      );
+    },
+    enabled: Boolean(expeditionId),
+  });
+}
+
+export function usePersonnelSafety(expeditionId?: string | null) {
+  return useQuery({
+    queryKey: controlTowerKeys.personnelSafety(expeditionId ?? ''),
+    queryFn: async () => {
+      if (!expeditionId) return null;
+      return await apiClient.get<PersonnelPostureSummary>(
+        `/control-tower/expeditions/${expeditionId}/personnel-safety`,
       );
     },
     enabled: Boolean(expeditionId),
@@ -328,6 +344,10 @@ export function useApprovalMutations(defaultExpeditionId?: string) {
         // Invalidate consequential audit timeline
         queryClient.invalidateQueries({
           queryKey: controlTowerKeys.auditRoot(targetExpeditionId),
+        });
+        // Invalidate personnel safety
+        queryClient.invalidateQueries({
+          queryKey: controlTowerKeys.personnelSafety(targetExpeditionId),
         });
       } else {
         // Invalidate all expedition queries without global cache wipe

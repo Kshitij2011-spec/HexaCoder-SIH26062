@@ -21,6 +21,7 @@ import { OfflineSyncIndicator } from './components/OfflineSyncIndicator';
 import { OfflineSyncDrawer } from './components/OfflineSyncDrawer';
 import { OfflineSyncSection } from './components/OfflineSyncSection';
 import { ResourceRunwayPanel } from './components/ResourceRunwayPanel';
+import { PersonnelSafetyPanel } from './components/PersonnelSafetyPanel';
 import type {
   MissionOperationsItem,
   ControlTowerConstraintItem,
@@ -112,14 +113,26 @@ export function ControlTowerPage() {
   const handleInitiateRunwayReplan = (item: ResourceRunwayItem) => {
     setInitiateModalState({
       isOpen: true,
-      missionId: item.dependent_mission_id,
-      reason: `Consumable runway deficit detected for ${item.item_name} (${item.item_code}): ${
-        item.resupply_gap_days > 0
-          ? `Resupply gap of ${item.resupply_gap_days.toFixed(1)} days prior to replenishment arrival.`
-          : item.runway_days != null
-          ? `Critically low runway (${item.runway_days.toFixed(1)} days remaining).`
-          : 'Stockout risk detected with no inbound replenishment scheduled.'
-      } Operational replanning requested.`,
+      missionId: item.dependent_mission_id ?? undefined,
+      constraintCode: item.active_constraint_id ? 'RESOURCE_RUNWAY_HORIZON' : undefined,
+      reason: `Consumables depletion risk on ${item.item_code} (${item.item_name}) at ${item.location_name || 'station'}. Operational runway estimated at ${item.runway_days ?? 'critical'} days; resupply gap is ${item.resupply_gap_days} days.`,
+    });
+  };
+
+  const handleInitiatePersonnelReplan = (context: {
+    personId?: string;
+    personCode?: string;
+    teamId?: string;
+    teamCode?: string;
+    missionId?: string;
+    missionCode?: string;
+    reason: string;
+  }) => {
+    setInitiateModalState({
+      isOpen: true,
+      missionId: context.missionId,
+      missionCode: context.missionCode,
+      reason: context.reason,
     });
   };
 
@@ -211,6 +224,12 @@ export function ControlTowerPage() {
           <ResourceRunwayPanel
             expeditionId={activeExpeditionId}
             onInitiateReplan={handleInitiateRunwayReplan}
+          />
+
+          {/* Personnel & Field Team Deployment Safety Engine (A10) */}
+          <PersonnelSafetyPanel
+            expeditionId={activeExpeditionId}
+            onInitiateReplan={handleInitiatePersonnelReplan}
           />
 
           {/* Mission Readiness Grid & Operations */}

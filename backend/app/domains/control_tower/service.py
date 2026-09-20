@@ -47,7 +47,9 @@ from backend.app.domains.control_tower.schemas import (
     DecisionRecommendationItem,
     DecisionApprovalItem,
     ConsequentialActionItem,
+    PersonnelPostureSummary,
 )
+from backend.app.domains.control_tower.personnel_safety import PersonnelSafetyService
 from backend.app.domains.inventory.runway import ResourceRunwayService
 from backend.app.domains.inventory.runway_schemas import (
     ResourceRunwayItem,
@@ -77,6 +79,7 @@ class ControlTowerService:
         self.audit_service = AuditService(session)
         self.replan_repo = ReplanRepository(session)
         self.runway_service = ResourceRunwayService(session)
+        self.personnel_safety_service = PersonnelSafetyService(session)
 
     # -----------------------------------------------------------------------
     # 1. Global Overview
@@ -220,6 +223,14 @@ class ControlTowerService:
             except Exception:
                 runway_summary = None
 
+        # 9. Personnel Safety Summary (A10)
+        personnel_summary = None
+        if target_exp_id:
+            try:
+                personnel_summary = self.get_personnel_safety(target_exp_id)
+            except Exception:
+                personnel_summary = None
+
         return ControlTowerOverview(
             total_expeditions=len(expedition_summaries),
             expeditions=expedition_summaries,
@@ -234,9 +245,14 @@ class ControlTowerService:
             offline_sync_summary=sync_counts,
             recent_operational_events=feed_items,
             resource_runway_summary=runway_summary,
+            personnel_safety_summary=personnel_summary,
             data_provenance="DERIVED",
             generated_at=now,
         )
+
+    def get_personnel_safety(self, expedition_id: uuid.UUID) -> PersonnelPostureSummary:
+        """Evaluates personnel and field team deployment safety for an expedition campaign."""
+        return self.personnel_safety_service.evaluate_expedition(expedition_id)
 
     def get_expedition_runways(
         self,
