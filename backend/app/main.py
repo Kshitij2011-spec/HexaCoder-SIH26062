@@ -19,7 +19,7 @@ from backend.app.shared.schemas.envelope import (
     create_success_response,
     create_error_response,
 )
-from backend.app.api.router import api_v1_router
+from backend.app.api.router import api_v1_router, v1_router
 from backend.app.api.v1.endpoints.visitor import router as visitor_router
 
 logger = get_logger("platform.main")
@@ -217,6 +217,7 @@ def root_health(request: Request):
     )
 
 
-# Mount versioned API v1 router and visitor alert router
+# Mount versioned API v1 router, v1 alias router, and visitor alert router
 app.include_router(api_v1_router)
+app.include_router(v1_router)
 app.include_router(visitor_router)

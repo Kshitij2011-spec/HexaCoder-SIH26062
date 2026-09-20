@@ -23,9 +23,11 @@ from backend.app.core.config import settings
 from backend.app.shared.schemas.envelope import ApiResponse, create_success_response
 
 api_v1_router = APIRouter(prefix="/api/v1")
+v1_router = APIRouter(prefix="/v1")
 
 
 @api_v1_router.get("/health", response_model=ApiResponse, tags=["Health"])
+@v1_router.get("/health", response_model=ApiResponse, tags=["Health"], include_in_schema=False)
 def api_v1_health(request: Request):
     """API v1 diagnostic health endpoint providing safe operational metrics."""
     db_health = get_db_health()
@@ -45,23 +47,24 @@ def api_v1_health(request: Request):
     )
 
 
-# Mount owned domain and platform routers
-api_v1_router.include_router(expeditions_router)
-api_v1_router.include_router(missions_router)
-api_v1_router.include_router(people_router)
-api_v1_router.include_router(teams_router)
-api_v1_router.include_router(time_windows_router)
-api_v1_router.include_router(locations_router)
-api_v1_router.include_router(transport_router)
-api_v1_router.include_router(cargo_router)
-api_v1_router.include_router(inventory_router)
-api_v1_router.include_router(assets_router)
-api_v1_router.include_router(incidents_router)
-api_v1_router.include_router(sync_router)
-api_v1_router.include_router(operations_router)
-api_v1_router.include_router(replanning_router)
-api_v1_router.include_router(events_router)
-api_v1_router.include_router(reasoning_router)
-api_v1_router.include_router(control_tower_router, prefix="/control-tower")
+# Mount owned domain and platform routers to both /api/v1 and /v1 (for proxy rewrite compatibility)
+for r in (api_v1_router, v1_router):
+    r.include_router(expeditions_router)
+    r.include_router(missions_router)
+    r.include_router(people_router)
+    r.include_router(teams_router)
+    r.include_router(time_windows_router)
+    r.include_router(locations_router)
+    r.include_router(transport_router)
+    r.include_router(cargo_router)
+    r.include_router(inventory_router)
+    r.include_router(assets_router)
+    r.include_router(incidents_router)
+    r.include_router(sync_router)
+    r.include_router(operations_router)
+    r.include_router(replanning_router)
+    r.include_router(events_router)
+    r.include_router(reasoning_router)
+    r.include_router(control_tower_router, prefix="/control-tower")
 
-__all__ = ["api_v1_router"]
+__all__ = ["api_v1_router", "v1_router"]
